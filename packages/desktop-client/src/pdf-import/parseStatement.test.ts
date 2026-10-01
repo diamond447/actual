@@ -35,6 +35,7 @@ describe('parseDate', () => {
   it('rejects text that is not a date', () => {
     expect(parseDate('1 234,56')).toBeNull();
     expect(parseDate('31.13.2026')).toBeNull();
+    expect(parseDate('31.02.2026')).toBeNull();
     expect(parseDate('Platba kartou')).toBeNull();
   });
 });
@@ -231,6 +232,95 @@ describe('parseStatement', () => {
 
     expect(result.transactions).toMatchObject([
       { payee: 'Potraviny U Nováků', amount: -1234.5 },
+    ]);
+  });
+
+  it('ignores zeros in the unused debit or credit column', () => {
+    const result = parseStatement([
+      page([
+        line(100, [40, 'Datum'], [100, 'Popis'], [360, 'Debet'], [440, 'Kredit'], [520, 'Zůstatek']),
+        line(120, [40, '02.03.2026'], [100, 'Výplata'], [360, '0,00'], [440, '35 000,00'], [520, '36 000,00']),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([35000]);
+  });
+
+  it('does not start rows from dates inside descriptions or summaries', () => {
+    const result = parseStatement([
+      page([
+        header,
+        line(120, [40, '02.03.2026'], [100, 'PLATBA KARTOU'], [400, '-249,00'], [500, '9 751,00']),
+        line(129, [100, 'Datum transakce: 01.03.2026']),
+        line(138, [100, 'ALBERT PRAHA']),
+        line(160, [40, '31.03.2026'], [100, 'Konečný zůstatek'], [500, '9 751,00']),
+        line(170, [40, 'Zůstatek k 31.03.2026'], [500, '9 751,00']),
+      ]),
+    ]);
+
+    expect(result.transactions).toMatchObject([
+      {
+        amount: -249,
+        payee: 'Datum transakce: 01.03.2026',
+        notes: 'PLATBA KARTOU · Datum transakce: 01.03.2026 · ALBERT PRAHA',
+      },
+    ]);
+  });
+
+  it('never uses the balance or a foreign currency column as the amount', () => {
+    const result = parseStatement([
+      page(
+        [
+          line(100, [40, 'Datum'], [100, 'Popis'], [300, 'Částka v původní měně'], [420, 'Částka'], [500, 'Disponibilní zůstatek']),
+          line(120, [40, '02.03.2026'], [100, 'Amazon'], [300, '-12,50 EUR'], [420, '-312,00'], [500, '9 688,00']),
+          line(140, [40, '03.03.2026'], [100, 'Nájem'], [500, '1 000,00']),
+        ],
+        [{ x: 415, y: 139, width: 60, height: 10 }],
+      ),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([-312, null]);
+  });
+
+  it('keeps the description that shares a cell with the date', () => {
+    const result = parseStatement([
+      page([
+        header,
+        line(120, [40, '02.03.2026 PLATBA KARTOU'], [400, '-249,00']),
+        line(129, [40, 'BILLA']),
+      ]),
+    ]);
+
+    expect(result.transactions).toMatchObject([
+      { date: '2026-03-02', payee: 'BILLA', notes: 'PLATBA KARTOU · BILLA' },
+    ]);
+  });
+
+  it('reads an amount from the second line of a row', () => {
+    const result = parseStatement([
+      page([
+        header,
+        line(120, [40, '02.03.2026'], [100, 'Odchozí platba']),
+        line(129, [100, 'Nájem'], [400, '-15 000,00'], [500, '1 000,00']),
+      ]),
+    ]);
+
+    expect(result.transactions).toMatchObject([
+      { amount: -15000, payee: 'Nájem', reviewReasons: [] },
+    ]);
+  });
+
+  it('flags a lone amount next to a blacked-out area without a header', () => {
+    const result = parseStatement([
+      page(
+        [line(120, [40, '02.03.2026'], [100, 'Kavárna'], [500, '911,00'])],
+        [{ x: 395, y: 119, width: 60, height: 10 }],
+      ),
+    ]);
+
+    expect(result.transactions[0].reviewReasons).toEqual([
+      'uncertain-amount',
+      'redacted',
     ]);
   });
 });

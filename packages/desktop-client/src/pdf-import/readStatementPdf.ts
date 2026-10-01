@@ -1,18 +1,17 @@
-import { darknessOf, removeRedactedItems, textItemsFromContent } from './pageContent';
+import { measureArea, removeHiddenText, textItemsFromContent } from './pageContent';
 import type { PagePixels } from './pageContent';
 import type { StatementPage, StatementTextItem } from './types';
 
 /** Pages with fewer text items are treated as scanned images. */
 const MIN_TEXT_ITEMS = 5;
-/** Render scale for redaction detection and OCR (2 = 144 DPI). */
+/** Render scale for finding blacked-out text (2 = 144 DPI). */
 const RENDER_SCALE = 2;
+/** Small statement print needs a higher resolution for OCR (216 DPI). */
+const OCR_SCALE = 3;
 
 export type StatementOcr = {
   /** Recognize words on a rendered page; coordinates in page points. */
-  recognize: (
-    image: OcrImage,
-    scale: number,
-  ) => Promise<StatementTextItem[]>;
+  recognize: (image: OcrImage, scale: number) => Promise<StatementTextItem[]>;
   terminate: () => Promise<void>;
 };
 
@@ -33,10 +32,13 @@ export class StatementPdfError extends Error {
   }
 }
 
+/** pdf.js data files, staged by stagePdfjsAssets in vite.config.mts. */
+const pdfjsAssetsUrl = `${import.meta.env.BASE_URL}pdfjs/`;
+
 /**
- * Read the pages of a PDF bank statement in the browser. Text under
- * blacked-out areas is removed, and pages without a text layer go
- * through OCR. Nothing leaves the device.
+ * Read the pages of a PDF bank statement in the browser. Text the user
+ * blacked out is removed, and pages without a text layer go through OCR.
+ * Nothing leaves the device.
  */
 export async function readStatementPdf(
   data: ArrayBuffer,
@@ -48,14 +50,23 @@ export async function readStatementPdf(
   );
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(data),
+    password,
+    isEvalSupported: false,
+    // Needed to decode scanned images (JBIG2, CCITT, JPEG 2000) and to
+    // render text in fonts that are not embedded
+    wasmUrl: `${pdfjsAssetsUrl}wasm/`,
+    standardFontDataUrl: `${pdfjsAssetsUrl}standard_fonts/`,
+    cMapUrl: `${pdfjsAssetsUrl}cmaps/`,
+    iccUrl: `${pdfjsAssetsUrl}iccs/`,
+  });
+
   let document;
   try {
-    document = await pdfjs.getDocument({
-      data: new Uint8Array(data),
-      password,
-      isEvalSupported: false,
-    }).promise;
+    document = await loadingTask.promise;
   } catch (error) {
+    await loadingTask.destroy();
     if (error instanceof pdfjs.PasswordException) {
       throw new StatementPdfError(
         error.code === pdfjs.PasswordResponses.INCORRECT_PASSWORD
@@ -66,7 +77,10 @@ export async function readStatementPdf(
     throw new StatementPdfError('invalid-pdf');
   }
 
+  // One canvas for all pages: Safari limits the total canvas memory
+  const canvas = createCanvas();
   let ocr: StatementOcr | null = null;
+  let isOcrUnavailable = false;
   const pages: StatementPage[] = [];
   try {
     for (let number = 1; number <= document.numPages; number++) {
@@ -75,60 +89,61 @@ export async function readStatementPdf(
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
       const textItems = textItemsFromContent(content.items, viewport.transform);
+      const needsOcr =
+        textItems.length < MIN_TEXT_ITEMS && !!createOcr && !isOcrUnavailable;
 
-      const canvas = createCanvas(
-        Math.ceil(viewport.width * RENDER_SCALE),
-        Math.ceil(viewport.height * RENDER_SCALE),
-      );
+      const scale = needsOcr ? OCR_SCALE : RENDER_SCALE;
+      canvas.width = Math.ceil(viewport.width * scale);
+      canvas.height = Math.ceil(viewport.height * scale);
       await page.render({
         canvas: canvas as HTMLCanvasElement,
-        viewport: page.getViewport({ scale: RENDER_SCALE }),
+        viewport: page.getViewport({ scale }),
       }).promise;
 
-      if (textItems.length < MIN_TEXT_ITEMS && createOcr) {
-        ocr ??= await createOcr();
-        pages.push({
-          width: viewport.width,
-          height: viewport.height,
-          items: await ocr.recognize(canvas, RENDER_SCALE),
-          redactions: [],
-        });
-      } else {
-        const pixels = getPixels(canvas);
-        const { items, redactions } = removeRedactedItems(textItems, rect =>
-          darknessOf(pixels, rect, RENDER_SCALE),
-        );
-        pages.push({
-          width: viewport.width,
-          height: viewport.height,
-          items,
-          redactions,
-        });
+      const pixels = getPixels(canvas);
+      let { items, redactions } = removeHiddenText(textItems, rect =>
+        measureArea(pixels, rect, scale),
+      );
+      if (needsOcr && createOcr) {
+        try {
+          ocr ??= await createOcr();
+          items = await ocr.recognize(canvas, scale);
+          redactions = [];
+        } catch (error) {
+          // Keep going with the text layer, e.g. for a blank last page
+          console.error('OCR of a statement page failed:', error);
+          isOcrUnavailable = true;
+        }
       }
+
+      pages.push({
+        width: viewport.width,
+        height: viewport.height,
+        items,
+        redactions,
+      });
       page.cleanup();
     }
   } finally {
+    canvas.width = 0;
+    canvas.height = 0;
     await ocr?.terminate();
     await document.destroy();
   }
   return pages;
 }
 
-function createCanvas(width: number, height: number): OcrImage {
+function createCanvas(): OcrImage {
   if (typeof OffscreenCanvas !== 'undefined') {
-    return new OffscreenCanvas(width, height);
+    return new OffscreenCanvas(1, 1);
   }
-  const canvas = window.document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  return canvas;
+  return window.document.createElement('canvas');
 }
 
 function getPixels(canvas: OcrImage): PagePixels {
-  const context = canvas.getContext('2d') as
-    | CanvasRenderingContext2D
-    | OffscreenCanvasRenderingContext2D
-    | null;
+  const context = (canvas as HTMLCanvasElement).getContext('2d', {
+    willReadFrequently: true,
+  });
   if (!context) {
     throw new Error('Canvas 2D context is not available');
   }

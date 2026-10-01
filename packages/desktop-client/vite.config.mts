@@ -171,6 +171,24 @@ async function stageOcrAssets(): Promise<void> {
   ]);
 }
 
+// Data files pdf.js needs to render scanned and non-embedded-font
+// statements (src/pdf-import/readStatementPdf.ts).
+const publicPdfjsDir = path.resolve(publicDir, 'pdfjs');
+
+async function stagePdfjsAssets(): Promise<void> {
+  const pdfjsDir = path.dirname(
+    requireFromHere.resolve('pdfjs-dist/package.json'),
+  );
+  await rm(publicPdfjsDir, { recursive: true, force: true });
+  await Promise.all(
+    ['wasm', 'standard_fonts', 'cmaps', 'iccs'].map(dir =>
+      cp(path.resolve(pdfjsDir, dir), path.resolve(publicPdfjsDir, dir), {
+        recursive: true,
+      }),
+    ),
+  );
+}
+
 async function stagePublicData(): Promise<void> {
   const migrationsDest = path.resolve(publicDataDir, 'migrations');
   await mkdir(publicDataDir, { recursive: true });
@@ -310,15 +328,20 @@ export default defineConfig(async ({ mode, command }) => {
         await cp(lootCoreOutDir, publicKcabDir, { recursive: true });
         return hash;
       });
-      const [, , , hash] = await Promise.all([
+      const [, , , , hash] = await Promise.all([
         stagePublicData(),
         stageOcrAssets(),
+        stagePdfjsAssets(),
         stagePluginsService(),
         stageKcab,
       ]);
       process.env.REACT_APP_BACKEND_WORKER_HASH = hash;
     } else {
-      await Promise.all([stagePublicData(), stageOcrAssets()]);
+      await Promise.all([
+        stagePublicData(),
+        stageOcrAssets(),
+        stagePdfjsAssets(),
+      ]);
       process.env.REACT_APP_BACKEND_WORKER_HASH = 'dev';
     }
   }
@@ -414,8 +437,8 @@ export default defineConfig(async ({ mode, command }) => {
               globPatterns: [
                 '**/*.{js,css,html,txt,wasm,sql,sqlite,ico,png,woff2,webmanifest}',
               ],
-              // OCR assets are large and only needed for scanned statements
-              globIgnores: ['**/ocr/**'],
+              // PDF import assets are large and only needed when importing
+              globIgnores: ['**/ocr/**', '**/pdfjs/**'],
               ignoreURLParametersMatching: [/^v$/],
               navigateFallback: '/index.html',
               maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB

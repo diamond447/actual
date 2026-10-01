@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
+import { Button } from '@actual-app/components/button';
 import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
@@ -30,26 +31,30 @@ export function StatementRowItem({
   const format = useFormat();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const [amountText, setAmountText] = useState('');
+  const [isIncome, setIsIncome] = useState(false);
 
   const needsAmount = row.reviewReasons.includes('missing-amount');
+  const isAmountUncertain = row.reviewReasons.includes('uncertain-amount');
   const isRedacted = row.reviewReasons.includes('redacted');
   const displayAmount =
-    row.amount === null ? null : flipSigns ? -row.amount : row.amount;
+    row.amount === null
+      ? null
+      : flipSigns && !row.isAmountManual
+        ? -row.amount
+        : row.amount;
   const checkboxId = `statement-row-${row.id}`;
 
-  const onAmountChange = (text: string) => {
+  // Typed amounts are final: the sign comes from the expense/income choice
+  // and is not affected by "Flip all signs"
+  const setManualAmount = (text: string, income: boolean) => {
     setAmountText(text);
+    setIsIncome(income);
     const amount = currencyToAmount(text);
-    // Amounts the user types in are expenses unless they start with "+"
-    const value =
-      amount === null
-        ? null
-        : text.trim().startsWith('+')
-          ? Math.abs(amount)
-          : -Math.abs(amount);
+    const magnitude = amount === null ? null : Math.abs(amount);
     onChange({
-      amount: value === null || !flipSigns ? value : -value,
-      isSelected: value !== null,
+      amount: magnitude === null ? null : income ? magnitude : -magnitude,
+      isAmountManual: true,
+      isSelected: magnitude !== null && magnitude !== 0,
     });
   };
 
@@ -88,24 +93,47 @@ export function StatementRowItem({
             <Trans>Some details are blacked out.</Trans>
           </Text>
         )}
+        {isAmountUncertain && (
+          <Text style={{ color: theme.warningText, ...styles.smallText }}>
+            <Trans>
+              This amount may be the account balance. Check it before
+              importing.
+            </Trans>
+          </Text>
+        )}
         {needsAmount && (
-          <View style={{ marginTop: 6, gap: 4 }}>
+          <View style={{ marginTop: 6, gap: 6 }}>
             <Text style={{ color: theme.warningText, ...styles.smallText }}>
               <Trans>
                 The amount could not be read. Type it in to import this
                 transaction.
               </Trans>
             </Text>
-            <InputField
-              inputMode="decimal"
-              placeholder={t('Amount')}
-              value={amountText}
-              onChangeValue={onAmountChange}
-            />
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <InputField
+                inputMode="decimal"
+                placeholder={t('Amount')}
+                value={amountText}
+                onChangeValue={text => setManualAmount(text, isIncome)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                variant={isIncome ? 'normal' : 'primary'}
+                onPress={() => setManualAmount(amountText, false)}
+              >
+                <Trans>Expense</Trans>
+              </Button>
+              <Button
+                variant={isIncome ? 'primary' : 'normal'}
+                onPress={() => setManualAmount(amountText, true)}
+              >
+                <Trans>Income</Trans>
+              </Button>
+            </View>
           </View>
         )}
       </View>
-      {displayAmount !== null && !needsAmount && (
+      {displayAmount !== null && (
         <FinancialText
           style={{
             fontWeight: 600,

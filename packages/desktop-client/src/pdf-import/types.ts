@@ -27,7 +27,11 @@ export type StatementPage = {
   redactions: StatementRect[];
 };
 
-export type ReviewReason = 'missing-amount' | 'missing-description' | 'redacted';
+export type ReviewReason =
+  | 'missing-amount'
+  | 'uncertain-amount'
+  | 'missing-description'
+  | 'redacted';
 
 export type ParsedStatementTransaction = {
   /** YYYY-MM-DD */

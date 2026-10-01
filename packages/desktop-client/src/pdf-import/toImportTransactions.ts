@@ -6,6 +6,8 @@ import type { ParsedStatementTransaction } from './types';
 export type StatementRow = ParsedStatementTransaction & {
   id: string;
   isSelected: boolean;
+  /** Typed in by the user, so its sign is final and never flipped */
+  isAmountManual?: boolean;
 };
 
 export function toStatementRows(
@@ -14,8 +16,10 @@ export function toStatementRows(
   return transactions.map((transaction, index) => ({
     ...transaction,
     id: String(index),
-    // Rows without an amount can only be imported after the user fills it in
-    isSelected: transaction.amount !== null,
+    // Rows without a reliable amount are imported only after a check
+    isSelected:
+      transaction.amount !== null &&
+      !transaction.reviewReasons.includes('uncertain-amount'),
   }));
 }
 
@@ -32,7 +36,7 @@ export function toImportTransactions(
       return {
         account: accountId,
         date: row.date,
-        amount: flipSigns ? -amount : amount,
+        amount: flipSigns && !row.isAmountManual ? -amount : amount,
         payee_name: row.payee,
         imported_payee: row.payee,
         notes: row.notes,

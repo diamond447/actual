@@ -120,6 +120,9 @@ export function ImportPdfPage() {
       : [];
 
   const onImport = async () => {
+    if (isImporting) {
+      return;
+    }
     setIsImporting(true);
     try {
       const result = await send('transactions-import', {
@@ -170,7 +173,7 @@ export function ImportPdfPage() {
             <ButtonWithLoading
               variant="primary"
               isLoading={isImporting}
-              isDisabled={transactions.length === 0}
+              isDisabled={transactions.length === 0 || isImporting}
               onPress={onImport}
               style={{ height: styles.mobileMinHeight }}
             >

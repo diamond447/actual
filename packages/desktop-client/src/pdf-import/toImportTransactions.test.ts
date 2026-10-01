@@ -18,11 +18,14 @@ const parsed = [
 ];
 
 describe('toImportTransactions', () => {
-  it('selects only rows with an amount', () => {
-    expect(toStatementRows(parsed).map(row => row.isSelected)).toEqual([
-      true,
-      false,
-    ]);
+  it('selects only rows with a reliable amount', () => {
+    const uncertain = {
+      ...parsed[0],
+      reviewReasons: ['uncertain-amount' as const],
+    };
+    expect(
+      toStatementRows([...parsed, uncertain]).map(row => row.isSelected),
+    ).toEqual([true, false, false]);
   });
 
   it('converts selected rows to import transactions', () => {
@@ -42,7 +45,9 @@ describe('toImportTransactions', () => {
 
   it('includes filled-in amounts and can flip signs', () => {
     const rows = toStatementRows(parsed).map(row =>
-      row.amount === null ? { ...row, amount: 15000, isSelected: true } : row,
+      row.amount === null
+        ? { ...row, amount: -15000, isSelected: true, isAmountManual: true }
+        : row,
     );
     expect(
       toImportTransactions(rows, 'account-1', { flipSigns: true }).map(
