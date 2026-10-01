@@ -4,11 +4,13 @@ import { getUnsafeZipMeta } from '@actual-app/core/shared/errors';
 import type { Budget } from '@actual-app/core/types/budget';
 import type { File } from '@actual-app/core/types/file';
 import type { Handlers } from '@actual-app/core/types/handlers';
+import type { SyncedPrefs } from '@actual-app/core/types/prefs';
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
-import { t } from 'i18next';
+import i18n, { t } from 'i18next';
 
 import { resetApp, setAppState } from '#app/appSlice';
+import { getLocaleBudgetPrefs } from '#budgetfiles/localeBudgetPrefs';
 import { closeModal, pushModal } from '#modals/modalsSlice';
 import { loadGlobalPrefs, loadPrefs } from '#prefs/prefsSlice';
 import { createAppAsyncThunk } from '#redux';
@@ -159,6 +161,15 @@ export const createBudget = createAppAsyncThunk(
       await send('create-demo-budget');
     } else {
       await send('create-budget', { testMode });
+
+      const localePrefs = testMode ? null : getLocaleBudgetPrefs(i18n.language);
+      if (localePrefs) {
+        await Promise.all(
+          Object.entries(localePrefs).map(([id, value]) =>
+            send('preferences/save', { id: id as keyof SyncedPrefs, value }),
+          ),
+        );
+      }
     }
 
     dispatch(closeModal());
