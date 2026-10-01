@@ -363,6 +363,7 @@ export type Modal =
         onEditNotes: (id: NoteEntity['id']) => void;
         onClose?: () => void;
         onReconcile?: () => void;
+        onImportPdf?: () => void;
         onToggleRunningBalance?: () => void;
         onToggleReconciled?: () => void;
       };

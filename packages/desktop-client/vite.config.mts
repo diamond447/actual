@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import { cp, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -128,6 +129,47 @@ async function stagePluginsService(): Promise<void> {
 // Extensions of data files served to the backend worker. Keep in sync
 // with the workbox `globPatterns` below so every listed file is precached.
 const DATA_FILE_EXTENSIONS = new Set(['.sql', '.js', '.sqlite']);
+
+// OCR for scanned PDF statements (src/pdf-import/tesseractOcr.ts) runs
+// fully in the browser, so serve the tesseract.js worker, wasm cores and
+// language data from the app instead of the default CDN.
+const publicOcrDir = path.resolve(publicDir, 'ocr');
+const requireFromHere = createRequire(import.meta.url);
+
+async function stageOcrAssets(): Promise<void> {
+  const packageDir = (name: string) =>
+    path.dirname(requireFromHere.resolve(`${name}/package.json`));
+  const tesseractDir = packageDir('tesseract.js');
+  const coreDir = path.dirname(
+    createRequire(path.join(tesseractDir, 'package.json')).resolve(
+      'tesseract.js-core/package.json',
+    ),
+  );
+
+  await rm(publicOcrDir, { recursive: true, force: true });
+  await mkdir(path.resolve(publicOcrDir, 'lang'), { recursive: true });
+  const coreFiles = (await readdir(coreDir)).filter(file =>
+    file.endsWith('-lstm.wasm.js'),
+  );
+  await Promise.all([
+    cp(
+      path.resolve(tesseractDir, 'dist/worker.min.js'),
+      path.resolve(publicOcrDir, 'worker.min.js'),
+    ),
+    ...coreFiles.map(file =>
+      cp(path.resolve(coreDir, file), path.resolve(publicOcrDir, file)),
+    ),
+    ...['ces', 'eng'].map(language =>
+      cp(
+        path.resolve(
+          packageDir(`@tesseract.js-data/${language}`),
+          `4.0.0_best_int/${language}.traineddata.gz`,
+        ),
+        path.resolve(publicOcrDir, `lang/${language}.traineddata.gz`),
+      ),
+    ),
+  ]);
+}
 
 async function stagePublicData(): Promise<void> {
   const migrationsDest = path.resolve(publicDataDir, 'migrations');
@@ -268,14 +310,15 @@ export default defineConfig(async ({ mode, command }) => {
         await cp(lootCoreOutDir, publicKcabDir, { recursive: true });
         return hash;
       });
-      const [, , hash] = await Promise.all([
+      const [, , , hash] = await Promise.all([
         stagePublicData(),
+        stageOcrAssets(),
         stagePluginsService(),
         stageKcab,
       ]);
       process.env.REACT_APP_BACKEND_WORKER_HASH = hash;
     } else {
-      await stagePublicData();
+      await Promise.all([stagePublicData(), stageOcrAssets()]);
       process.env.REACT_APP_BACKEND_WORKER_HASH = 'dev';
     }
   }
@@ -371,6 +414,8 @@ export default defineConfig(async ({ mode, command }) => {
               globPatterns: [
                 '**/*.{js,css,html,txt,wasm,sql,sqlite,ico,png,woff2,webmanifest}',
               ],
+              // OCR assets are large and only needed for scanned statements
+              globIgnores: ['**/ocr/**'],
               ignoreURLParametersMatching: [/^v$/],
               navigateFallback: '/index.html',
               maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB

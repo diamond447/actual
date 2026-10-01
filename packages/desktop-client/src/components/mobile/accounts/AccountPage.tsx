@@ -17,6 +17,7 @@ import { MobileBackButton } from '#components/mobile/MobileBackButton';
 import { AddTransactionButton } from '#components/mobile/transactions/AddTransactionButton';
 import { MobilePageHeader, Page } from '#components/Page';
 import { useAccount } from '#hooks/useAccount';
+import { useNavigate } from '#hooks/useNavigate';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 import {
   collapseModals,
@@ -190,6 +191,12 @@ function AccountHeader({ account }: { readonly account: AccountEntity }) {
     );
   }, [hideReconciled, setHideReconciled, dispatch]);
 
+  const navigate = useNavigate();
+  const onImportPdf = useCallback(() => {
+    dispatch(collapseModals({ rootModalName: 'account-menu' }));
+    void navigate(`/accounts/${account.id}/import-pdf`);
+  }, [account.id, dispatch, navigate]);
+
   const onClick = useCallback(() => {
     dispatch(
       pushModal({
@@ -202,6 +209,7 @@ function AccountHeader({ account }: { readonly account: AccountEntity }) {
             onCloseAccount,
             onReopenAccount,
             onReconcile,
+            onImportPdf,
             onToggleRunningBalance,
             onToggleReconciled,
           },
@@ -213,6 +221,7 @@ function AccountHeader({ account }: { readonly account: AccountEntity }) {
     dispatch,
     onCloseAccount,
     onEditNotes,
+    onImportPdf,
     onReconcile,
     onReopenAccount,
     onSave,

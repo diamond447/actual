@@ -30,6 +30,7 @@ import { EnableBankingCallback } from './EnableBankingCallback';
 import { FeatureErrorFallback } from './FeatureErrorFallback';
 import { GlobalKeys } from './GlobalKeys';
 import { MobileBankSyncAccountEditPage } from './mobile/banksync/MobileBankSyncAccountEditPage';
+import { ImportPdfPage } from './mobile/import/ImportPdfPage';
 import { MobileNavTabs } from './mobile/MobileNavTabs';
 import { TransactionEdit } from './mobile/transactions/TransactionEdit';
 import { NotificationsPage } from './news/NotificationsPage';
@@ -407,6 +408,18 @@ export function FinancesApp() {
                           resetKeys={[location.pathname]}
                         >
                           <NarrowAlternate name="Account" />
+                        </ErrorBoundary>
+                      }
+                    />
+
+                    <Route
+                      path="/accounts/:id/import-pdf"
+                      element={
+                        <ErrorBoundary
+                          FallbackComponent={FeatureErrorFallback}
+                          resetKeys={[location.pathname]}
+                        >
+                          <ImportPdfPage />
                         </ErrorBoundary>
                       }
                     />
