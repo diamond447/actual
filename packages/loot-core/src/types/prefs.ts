@@ -25,6 +25,9 @@ export type SyncedPrefs = Partial<
     | 'dateFormat'
     | 'numberFormat'
     | 'hideFraction'
+    // 'natural' (default): typed digits are whole units; 'cents': digits fill
+    // in from the smallest unit like a cash register
+    | 'amountEntryMode'
     | 'isPrivacyEnabled'
     | 'currencySymbolPosition'
     | 'currencySpaceBetweenAmountAndSymbol'
