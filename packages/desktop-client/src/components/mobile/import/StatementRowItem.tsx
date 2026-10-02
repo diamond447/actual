@@ -7,7 +7,10 @@ import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import * as monthUtils from '@actual-app/core/shared/months';
-import { amountToInteger, currencyToAmount } from '@actual-app/core/shared/util';
+import {
+  amountToInteger,
+  currencyToAmount,
+} from '@actual-app/core/shared/util';
 
 import { FinancialText } from '#components/FinancialText';
 import { Checkbox } from '#components/forms';
@@ -96,8 +99,7 @@ export function StatementRowItem({
         {isAmountUncertain && (
           <Text style={{ color: theme.warningText, ...styles.smallText }}>
             <Trans>
-              This amount may be the account balance. Check it before
-              importing.
+              This amount may be the account balance. Check it before importing.
             </Trans>
           </Text>
         )}

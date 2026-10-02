@@ -38,7 +38,12 @@ describe('textItemsFromContent', () => {
   it('converts PDF coordinates to top-left based page points', () => {
     const items = textItemsFromContent(
       [
-        { str: 'Albert', transform: [8, 0, 0, 8, 40, 700], width: 24, height: 8 },
+        {
+          str: 'Albert',
+          transform: [8, 0, 0, 8, 40, 700],
+          width: 24,
+          height: 8,
+        },
         { str: ' ', transform: [8, 0, 0, 8, 64, 700], width: 2, height: 8 },
         { type: 'beginMarkedContent' },
       ],
@@ -52,7 +57,14 @@ describe('textItemsFromContent', () => {
 
   it('skips rotated text', () => {
     const items = textItemsFromContent(
-      [{ str: 'Margin note', transform: [0, 8, -8, 0, 20, 400], width: 40, height: 8 }],
+      [
+        {
+          str: 'Margin note',
+          transform: [0, 8, -8, 0, 20, 400],
+          width: 40,
+          height: 8,
+        },
+      ],
       viewportTransform,
     );
 

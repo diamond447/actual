@@ -1,4 +1,8 @@
-import { measureArea, removeHiddenText, textItemsFromContent } from './pageContent';
+import {
+  measureArea,
+  removeHiddenText,
+  textItemsFromContent,
+} from './pageContent';
 import type { PagePixels } from './pageContent';
 import type { StatementPage, StatementTextItem } from './types';
 
@@ -24,11 +28,17 @@ export type ReadStatementOptions = {
   onProgress?: (progress: { page: number; pageCount: number }) => void;
 };
 
+type StatementPdfErrorReason =
+  | 'password-required'
+  | 'wrong-password'
+  | 'invalid-pdf';
+
 export class StatementPdfError extends Error {
-  constructor(
-    readonly reason: 'password-required' | 'wrong-password' | 'invalid-pdf',
-  ) {
+  readonly reason: StatementPdfErrorReason;
+
+  constructor(reason: StatementPdfErrorReason) {
     super(reason);
+    this.reason = reason;
   }
 }
 
@@ -45,15 +55,13 @@ export async function readStatementPdf(
   { password, createOcr, onProgress }: ReadStatementOptions = {},
 ): Promise<StatementPage[]> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const { default: workerUrl } = await import(
-    'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
-  );
+  const { default: workerUrl } =
+    await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(data),
     password,
-    isEvalSupported: false,
     // Needed to decode scanned images (JBIG2, CCITT, JPEG 2000) and to
     // render text in fonts that are not embedded
     wasmUrl: `${pdfjsAssetsUrl}wasm/`,
@@ -128,7 +136,7 @@ export async function readStatementPdf(
     canvas.width = 0;
     canvas.height = 0;
     await ocr?.terminate();
-    await document.destroy();
+    await loadingTask.destroy();
   }
   return pages;
 }

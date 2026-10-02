@@ -25,6 +25,8 @@ export type StatementPage = {
   items: StatementTextItem[];
   /** Areas the user blacked out. Text under them is already removed. */
   redactions: StatementRect[];
+  /** The page could not be read at all (e.g. OCR failed). */
+  isUnreadable?: boolean;
 };
 
 export type ReviewReason =
@@ -43,8 +45,24 @@ export type ParsedStatementTransaction = {
   reviewReasons: ReviewReason[];
 };
 
+/**
+ * Something on the statement that may hold money but was not read as a
+ * transaction. Shown to the user so nothing goes missing silently.
+ */
+export type UnrecognizedLine = {
+  /** 1-based page number */
+  page: number;
+  /** The line's text, or empty for an unreadable page */
+  text: string;
+  reason: 'unmatched-line' | 'unreadable-page';
+};
+
 export type ParsedStatement = {
   transactions: ParsedStatementTransaction[];
+  unrecognizedLines: UnrecognizedLine[];
+  /** Balances printed on the statement, used to check the total */
+  openingBalance: number | null;
+  closingBalance: number | null;
   /**
    * True when the statement has no signs or debit/credit columns, so it is
    * unclear which transactions are expenses.

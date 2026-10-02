@@ -35,10 +35,7 @@ export async function createTesseractOcr(): Promise<StatementOcr> {
             for (const word of line.words) {
               // Keep unsure words: a dropped minus sign would silently turn
               // an expense into income
-              if (
-                word.text.trim() === '' ||
-                ocrNoisePattern.test(word.text)
-              ) {
+              if (word.text.trim() === '' || ocrNoisePattern.test(word.text)) {
                 continue;
               }
               const { x0, y0, x1, y1 } = word.bbox;

@@ -79,9 +79,21 @@ describe('parseStatement', () => {
         line(40, [40, 'Výpis z účtu za období 01.03.2026 - 31.03.2026']),
         line(80, [40, 'Počáteční zůstatek'], [500, '10 000,00']),
         header,
-        line(120, [40, '02.03.2026'], [100, 'PLATBA KARTOU'], [400, '-249,00'], [500, '9 751,00']),
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'PLATBA KARTOU'],
+          [400, '-249,00'],
+          [500, '9 751,00'],
+        ),
         line(129, [100, 'ALBERT 0123, PRAHA']),
-        line(150, [40, '05.03.2026'], [100, 'PŘÍCHOZÍ PLATBA'], [400, '35 000,00'], [500, '44 751,00']),
+        line(
+          150,
+          [40, '05.03.2026'],
+          [100, 'PŘÍCHOZÍ PLATBA'],
+          [400, '35 000,00'],
+          [500, '44 751,00'],
+        ),
         line(159, [100, 'ZAMESTNAVATEL S.R.O.']),
         line(168, [100, 'VS: 202603']),
         line(200, [40, 'Konečný zůstatek'], [500, '44 751,00']),
@@ -110,8 +122,22 @@ describe('parseStatement', () => {
   it('handles two date columns', () => {
     const result = parseStatement([
       page([
-        line(100, [40, 'Datum operace'], [110, 'Datum zaúčtování'], [180, 'Popis'], [420, 'Částka'], [510, 'Zůstatek']),
-        line(120, [40, '01.03.2026'], [110, '03.03.2026'], [180, 'Lékárna Dr.Max'], [420, '-189,50'], [510, '1 000,00']),
+        line(
+          100,
+          [40, 'Datum operace'],
+          [110, 'Datum zaúčtování'],
+          [180, 'Popis'],
+          [420, 'Částka'],
+          [510, 'Zůstatek'],
+        ),
+        line(
+          120,
+          [40, '01.03.2026'],
+          [110, '03.03.2026'],
+          [180, 'Lékárna Dr.Max'],
+          [420, '-189,50'],
+          [510, '1 000,00'],
+        ),
       ]),
     ]);
 
@@ -123,9 +149,28 @@ describe('parseStatement', () => {
   it('uses debit and credit columns for the sign', () => {
     const result = parseStatement([
       page([
-        line(100, [40, 'Datum'], [100, 'Popis'], [360, 'Výdaj'], [440, 'Příjem'], [520, 'Zůstatek']),
-        line(120, [40, '02.03.2026'], [100, 'Nájem'], [360, '15 000,00'], [520, '5 000,00']),
-        line(140, [40, '03.03.2026'], [100, 'Vrácení přeplatku'], [440, '1 200,00'], [520, '6 200,00']),
+        line(
+          100,
+          [40, 'Datum'],
+          [100, 'Popis'],
+          [360, 'Výdaj'],
+          [440, 'Příjem'],
+          [520, 'Zůstatek'],
+        ),
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'Nájem'],
+          [360, '15 000,00'],
+          [520, '5 000,00'],
+        ),
+        line(
+          140,
+          [40, '03.03.2026'],
+          [100, 'Vrácení přeplatku'],
+          [440, '1 200,00'],
+          [520, '6 200,00'],
+        ),
       ]),
     ]);
 
@@ -136,8 +181,20 @@ describe('parseStatement', () => {
   it('falls back to the first amount without a header', () => {
     const result = parseStatement([
       page([
-        line(120, [40, '02.03.2026'], [100, 'Kavárna'], [400, '-89,00'], [500, '911,00']),
-        line(140, [40, '03.03.2026'], [100, 'Pekárna'], [400, '-45,00'], [500, '866,00']),
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'Kavárna'],
+          [400, '-89,00'],
+          [500, '911,00'],
+        ),
+        line(
+          140,
+          [40, '03.03.2026'],
+          [100, 'Pekárna'],
+          [400, '-45,00'],
+          [500, '866,00'],
+        ),
       ]),
     ]);
 
@@ -201,11 +258,23 @@ describe('parseStatement', () => {
     const result = parseStatement([
       page([
         header,
-        line(120, [40, '02.03.2026'], [100, 'Kavárna'], [400, '-89,00'], [500, '911,00']),
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'Kavárna'],
+          [400, '-89,00'],
+          [500, '911,00'],
+        ),
         line(800, [40, 'Strana 1 z 2']),
       ]),
       page([
-        line(40, [40, '03.03.2026'], [100, 'Pekárna'], [400, '-45,00'], [500, '866,00']),
+        line(
+          40,
+          [40, '03.03.2026'],
+          [100, 'Pekárna'],
+          [400, '-45,00'],
+          [500, '866,00'],
+        ),
       ]),
     ]);
 
@@ -238,8 +307,22 @@ describe('parseStatement', () => {
   it('ignores zeros in the unused debit or credit column', () => {
     const result = parseStatement([
       page([
-        line(100, [40, 'Datum'], [100, 'Popis'], [360, 'Debet'], [440, 'Kredit'], [520, 'Zůstatek']),
-        line(120, [40, '02.03.2026'], [100, 'Výplata'], [360, '0,00'], [440, '35 000,00'], [520, '36 000,00']),
+        line(
+          100,
+          [40, 'Datum'],
+          [100, 'Popis'],
+          [360, 'Debet'],
+          [440, 'Kredit'],
+          [520, 'Zůstatek'],
+        ),
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'Výplata'],
+          [360, '0,00'],
+          [440, '35 000,00'],
+          [520, '36 000,00'],
+        ),
       ]),
     ]);
 
@@ -250,10 +333,21 @@ describe('parseStatement', () => {
     const result = parseStatement([
       page([
         header,
-        line(120, [40, '02.03.2026'], [100, 'PLATBA KARTOU'], [400, '-249,00'], [500, '9 751,00']),
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'PLATBA KARTOU'],
+          [400, '-249,00'],
+          [500, '9 751,00'],
+        ),
         line(129, [100, 'Datum transakce: 01.03.2026']),
         line(138, [100, 'ALBERT PRAHA']),
-        line(160, [40, '31.03.2026'], [100, 'Konečný zůstatek'], [500, '9 751,00']),
+        line(
+          160,
+          [40, '31.03.2026'],
+          [100, 'Konečný zůstatek'],
+          [500, '9 751,00'],
+        ),
         line(170, [40, 'Zůstatek k 31.03.2026'], [500, '9 751,00']),
       ]),
     ]);
@@ -271,8 +365,22 @@ describe('parseStatement', () => {
     const result = parseStatement([
       page(
         [
-          line(100, [40, 'Datum'], [100, 'Popis'], [300, 'Částka v původní měně'], [420, 'Částka'], [500, 'Disponibilní zůstatek']),
-          line(120, [40, '02.03.2026'], [100, 'Amazon'], [300, '-12,50 EUR'], [420, '-312,00'], [500, '9 688,00']),
+          line(
+            100,
+            [40, 'Datum'],
+            [100, 'Popis'],
+            [300, 'Částka v původní měně'],
+            [420, 'Částka'],
+            [500, 'Disponibilní zůstatek'],
+          ),
+          line(
+            120,
+            [40, '02.03.2026'],
+            [100, 'Amazon'],
+            [300, '-12,50 EUR'],
+            [420, '-312,00'],
+            [500, '9 688,00'],
+          ),
           line(140, [40, '03.03.2026'], [100, 'Nájem'], [500, '1 000,00']),
         ],
         [{ x: 415, y: 139, width: 60, height: 10 }],
@@ -321,6 +429,93 @@ describe('parseStatement', () => {
     expect(result.transactions[0].reviewReasons).toEqual([
       'uncertain-amount',
       'redacted',
+    ]);
+  });
+
+  it('reports lines with money that are not transactions', () => {
+    const result = parseStatement([
+      page([
+        header,
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'Kavárna'],
+          [400, '-89,00'],
+          [500, '911,00'],
+        ),
+        line(200, [40, 'Poplatek za vedení účtu'], [400, '-49,00']),
+        line(
+          220,
+          [250, '03.03.2026'],
+          [300, 'Posunutý řádek'],
+          [400, '-10,00'],
+        ),
+        line(240, [40, 'Disponibilní zůstatek'], [500, '862,00']),
+      ]),
+      {
+        width: 595,
+        height: 842,
+        items: [],
+        redactions: [],
+        isUnreadable: true,
+      },
+    ]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.unrecognizedLines).toEqual([
+      {
+        page: 1,
+        text: 'Poplatek za vedení účtu  -49,00',
+        reason: 'unmatched-line',
+      },
+      {
+        page: 1,
+        text: '03.03.2026  Posunutý řádek  -10,00',
+        reason: 'unmatched-line',
+      },
+      { page: 2, text: '', reason: 'unreadable-page' },
+    ]);
+  });
+
+  it('reads the opening and closing balance', () => {
+    const result = parseStatement([
+      page([
+        line(80, [40, 'Počáteční zůstatek'], [500, '10 000,00']),
+        header,
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'Kavárna'],
+          [400, '-89,00'],
+          [500, '9 911,00'],
+        ),
+        line(200, [40, 'Konečný zůstatek k 31.03.2026'], [500, '9 911,00']),
+      ]),
+    ]);
+
+    expect(result.openingBalance).toBe(10000);
+    expect(result.closingBalance).toBe(9911);
+  });
+
+  it('reads several transactions listed under one date', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          line(120, [40, '02.03.2026'], [100, 'Kavárna'], [400, '-89,00']),
+          line(129, [100, 'Pekárna'], [400, '-45,00']),
+          line(140, [40, '03.03.2026'], [100, 'Nájem']),
+          line(149, [100, 'Billa'], [400, '-300,00']),
+        ],
+        [{ x: 395, y: 139, width: 60, height: 10 }],
+      ),
+    ]);
+
+    expect(result.transactions.map(t => [t.date, t.payee, t.amount])).toEqual([
+      ['2026-03-02', 'Kavárna', -89],
+      ['2026-03-02', 'Pekárna', -45],
+      ['2026-03-03', 'Nájem', null],
+      ['2026-03-03', 'Billa', -300],
     ]);
   });
 });

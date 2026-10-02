@@ -5,6 +5,7 @@ import type {
   StatementPage,
   StatementRect,
   StatementTextItem,
+  UnrecognizedLine,
 } from './types';
 
 /**
@@ -18,13 +19,23 @@ import type {
  */
 export function parseStatement(pages: StatementPage[]): ParsedStatement {
   const transactions: ParsedStatementTransaction[] = [];
+  const unrecognizedLines: UnrecognizedLine[] = [];
+  let openingBalance: number | null = null;
+  let closingBalance: number | null = null;
   let columns: Column[] | null = null;
   // Where dates of transaction rows start, so dates elsewhere are ignored
   let dateX: number | null = null;
   let hasSignedAmounts = false;
   let usesDebitCreditColumns = false;
 
-  for (const page of pages) {
+  for (const [pageIndex, page] of pages.entries()) {
+    if (page.isUnreadable) {
+      unrecognizedLines.push({
+        page: pageIndex + 1,
+        text: '',
+        reason: 'unreadable-page',
+      });
+    }
     const lines = groupLines(page.items);
     let current: PendingTransaction | null = null;
 
@@ -35,7 +46,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
       }
     };
 
-    const useAmount = (amount: PickedAmount | null) => {
+    const takeAmount = (amount: PickedAmount | null) => {
       if (amount?.signed) {
         hasSignedAmounts = true;
       }
@@ -55,8 +66,14 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         continue;
       }
 
-      if (isSummaryLine(line)) {
+      const summary = parseSummaryLine(line);
+      if (summary) {
         finish();
+        if (summary.kind === 'opening') {
+          openingBalance ??= summary.amount;
+        } else if (summary.kind === 'closing') {
+          closingBalance = summary.amount ?? closingBalance;
+        }
         continue;
       }
 
@@ -75,7 +92,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         const isRedacted = overlapsRedaction(line, page.redactions);
         current = {
           date: date.value,
-          amount: useAmount(picked),
+          amount: takeAmount(picked),
           // Without a header, a single amount on a row with a blacked-out
           // area may well be the balance
           isAmountUncertain: !columns && isRedacted && amounts.length === 1,
@@ -92,21 +109,52 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         continue;
       }
 
-      if (current) {
-        if (line.y - current.bottom > line.height * 2.5) {
-          finish();
-          continue;
-        }
+      const lineAmounts = findAmounts(line);
+      const startsWithDate =
+        !!line.cells[0] && !!parseLeadingDate(line.cells[0].text);
+      const picked = columns ? pickAmount(lineAmounts, columns) : null;
 
+      if (
+        current &&
+        (line.y - current.bottom > line.height * 2.5 ||
+          // A dated row outside the date column is reported, not merged
+          (startsWithDate && lineAmounts.length > 0))
+      ) {
+        finish();
+      }
+
+      if (
+        current &&
+        picked &&
+        (current.amount !== null || current.isRedacted)
+      ) {
+        // Statements that print the date once per day list further
+        // transactions of that day without a date. A row whose amount was
+        // blacked out never takes the next row's amount.
+        const sameDay: string = current.date;
+        finish();
+        current = {
+          date: sameDay,
+          amount: takeAmount(picked),
+          isAmountUncertain: false,
+          isRedacted: overlapsRedaction(line, page.redactions),
+          descriptionLines: [
+            descriptionOf(
+              line,
+              lineAmounts.map(amount => amount.cell),
+            ),
+          ].filter(Boolean),
+          bottom: line.y + line.height,
+        };
+        continue;
+      }
+
+      if (current) {
         // Some layouts put the amount on the second line of a row
         let amountCells: Cell[] = [];
-        if (current.amount === null && columns) {
-          const amounts = findAmounts(line);
-          const picked = pickAmount(amounts, columns);
-          if (picked) {
-            current.amount = useAmount(picked);
-            amountCells = amounts.map(amount => amount.cell);
-          }
+        if (current.amount === null && picked) {
+          current.amount = takeAmount(picked);
+          amountCells = lineAmounts.map(amount => amount.cell);
         }
         const text = descriptionOf(line, amountCells);
         if (text) {
@@ -114,6 +162,21 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         }
         current.isRedacted ||= overlapsRedaction(line, page.redactions);
         current.bottom = line.y + line.height;
+        continue;
+      }
+
+      // Anything else with an amount (or a date in the table) might be a
+      // transaction we could not read
+      const hasAmount = lineAmounts.some(amount => amount.value !== 0);
+      if (
+        (hasAmount || (columns && startsWithDate)) &&
+        !mentionsBalance(line)
+      ) {
+        unrecognizedLines.push({
+          page: pageIndex + 1,
+          text: line.cells.map(cell => cell.text).join('  '),
+          reason: 'unmatched-line',
+        });
       }
     }
 
@@ -122,6 +185,9 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
 
   return {
     transactions,
+    unrecognizedLines,
+    openingBalance,
+    closingBalance,
     hasUncertainSigns:
       transactions.length > 0 && !hasSignedAmounts && !usesDebitCreditColumns,
   };
@@ -238,11 +304,13 @@ const headerKinds: Array<{ kind: ColumnKind; pattern: RegExp }> = [
   { kind: 'balance', pattern: /zustatek|balance|saldo|\bstav\b/ },
   {
     kind: 'debit',
-    pattern: /\bdebet\b|\bvydaje?\b|\bvydej\b|\bodchozi\b|withdrawals?|\bdebit\b|ma dati/,
+    pattern:
+      /\bdebet\b|\bvydaje?\b|\bvydej\b|\bodchozi\b|withdrawals?|\bdebit\b|ma dati/,
   },
   {
     kind: 'credit',
-    pattern: /\bkredit\b|\bprijem\b|\bprijmy\b|\bprichozi\b|deposits?|\bcredit\b|^dal$/,
+    pattern:
+      /\bkredit\b|\bprijem\b|\bprijmy\b|\bprichozi\b|deposits?|\bcredit\b|^dal$/,
   },
   { kind: 'amount', pattern: /castka|amount|\bobrat\b|\bsuma\b/ },
   { kind: 'date', pattern: /datum|\bdate\b/ },
@@ -255,9 +323,7 @@ const headerKinds: Array<{ kind: ColumnKind; pattern: RegExp }> = [
 
 function parseHeader(line: Line): Column[] | null {
   // A row with a date or an amount is data, even with a "Debet" type cell
-  if (
-    line.cells.some(cell => parseDate(cell.text) || parseAmount(cell.text))
-  ) {
+  if (line.cells.some(cell => parseDate(cell.text) || parseAmount(cell.text))) {
     return null;
   }
 
@@ -282,9 +348,33 @@ function parseHeader(line: Line): Column[] | null {
 
 const summaryPattern =
   /^(pocatecni|konecny|celkem|soucet|souhrn|obraty|zustatek|stav uctu|opening|closing|total|balance|strana|page)\b/;
+const openingPattern =
+  /^(pocatecni (zustatek|stav)|zustatek na zacatku|predchozi zustatek|opening balance|previous balance|starting balance)/;
+const closingPattern =
+  /^(konecny (zustatek|stav)|zustatek na konci|novy zustatek|closing balance|ending balance|new balance)/;
 
-function isSummaryLine(line: Line) {
-  return line.cells.some(cell => summaryPattern.test(normalize(cell.text)));
+/** Totals, balances and page footers, which are not transactions. */
+function parseSummaryLine(
+  line: Line,
+): { kind: 'opening' | 'closing' | 'other'; amount: number | null } | null {
+  const texts = line.cells.map(cell => normalize(cell.text));
+  if (!texts.some(text => summaryPattern.test(text))) {
+    return null;
+  }
+  const amounts = findAmounts(line);
+  const amount = amounts.length > 0 ? amounts[amounts.length - 1].value : null;
+  const kind = texts.some(text => openingPattern.test(text))
+    ? 'opening'
+    : texts.some(text => closingPattern.test(text))
+      ? 'closing'
+      : 'other';
+  return { kind, amount };
+}
+
+function mentionsBalance(line: Line) {
+  return line.cells.some(cell =>
+    /zustatek|balance|saldo/.test(normalize(cell.text)),
+  );
 }
 
 const datePatterns: Array<{

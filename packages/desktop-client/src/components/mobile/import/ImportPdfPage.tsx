@@ -18,7 +18,10 @@ import { useFormat } from '#hooks/useFormat';
 import { useNavigate } from '#hooks/useNavigate';
 import { addNotification } from '#notifications/notificationsSlice';
 import { parseStatement } from '#pdf-import/parseStatement';
-import { readStatementPdf, StatementPdfError } from '#pdf-import/readStatementPdf';
+import {
+  readStatementPdf,
+  StatementPdfError,
+} from '#pdf-import/readStatementPdf';
 import { createTesseractOcr } from '#pdf-import/tesseractOcr';
 import {
   toImportTransactions,
@@ -76,7 +79,10 @@ export function ImportPdfPage() {
         hasUncertainSigns: statement.hasUncertainSigns,
       });
     } catch (error) {
-      if (error instanceof StatementPdfError && error.reason !== 'invalid-pdf') {
+      if (
+        error instanceof StatementPdfError &&
+        error.reason !== 'invalid-pdf'
+      ) {
         setStep({
           name: 'password',
           file,
@@ -107,7 +113,9 @@ export function ImportPdfPage() {
     }
     setStep({
       ...step,
-      rows: step.rows.map(row => (row.id === id ? { ...row, ...changes } : row)),
+      rows: step.rows.map(row =>
+        row.id === id ? { ...row, ...changes } : row,
+      ),
     });
   };
 
@@ -269,8 +277,8 @@ export function ImportPdfPage() {
           <View style={{ padding: 15, gap: 10 }}>
             <Text>
               <Trans count={step.rows.length}>
-                Found {{ count: step.rows.length }} transactions. Check them
-                and uncheck the ones you do not want to import.
+                Found {{ count: step.rows.length }} transactions. Check them and
+                uncheck the ones you do not want to import.
               </Trans>
             </Text>
             {step.hasUncertainSigns && (
