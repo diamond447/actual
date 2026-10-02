@@ -97,8 +97,8 @@ export async function readStatementPdf(
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
       const textItems = textItemsFromContent(content.items, viewport.transform);
-      const needsOcr =
-        textItems.length < MIN_TEXT_ITEMS && !!createOcr && !isOcrUnavailable;
+      const hasTextLayer = textItems.length >= MIN_TEXT_ITEMS;
+      const needsOcr = !hasTextLayer && !!createOcr && !isOcrUnavailable;
 
       const scale = needsOcr ? OCR_SCALE : RENDER_SCALE;
       canvas.width = Math.ceil(viewport.width * scale);
@@ -112,23 +112,33 @@ export async function readStatementPdf(
       let { items, redactions } = removeHiddenText(textItems, rect =>
         measureArea(pixels, rect, scale),
       );
+      let isRecognized = hasTextLayer;
       if (needsOcr && createOcr) {
         try {
           ocr ??= await createOcr();
           items = await ocr.recognize(canvas, scale);
           redactions = [];
+          isRecognized = items.length > 0;
         } catch (error) {
-          // Keep going with the text layer, e.g. for a blank last page
           console.error('OCR of a statement page failed:', error);
           isOcrUnavailable = true;
         }
       }
+      // A page with print on it that could not be read is reported, so a
+      // failed OCR never hides transactions
+      const isBlank =
+        measureArea(
+          pixels,
+          { x: 0, y: 0, width: viewport.width, height: viewport.height },
+          scale,
+        ).ink < 0.001;
 
       pages.push({
         width: viewport.width,
         height: viewport.height,
         items,
         redactions,
+        isUnreadable: !isRecognized && !isBlank,
       });
       page.cleanup();
     }

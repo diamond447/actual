@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
@@ -12,7 +12,6 @@ import { send } from '@actual-app/core/platform/client/connection';
 import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import { amountToInteger } from '@actual-app/core/shared/util';
-import type { ImportTransactionEntity } from '@actual-app/core/types/models';
 
 import { MobileBackButton } from '#components/mobile/MobileBackButton';
 import { InputField } from '#components/mobile/MobileForms';
@@ -37,26 +36,35 @@ import {
 import type { StatementStats } from '#pdf-import/statementStats';
 import { createTesseractOcr } from '#pdf-import/tesseractOcr';
 import {
-  toImportTransactions,
+  effectiveAmount,
+  toImportEntries,
   toStatementRows,
 } from '#pdf-import/toImportTransactions';
-import type { StatementRow } from '#pdf-import/toImportTransactions';
+import type {
+  ImportEntry,
+  StatementRow,
+} from '#pdf-import/toImportTransactions';
 import type { UnrecognizedLine } from '#pdf-import/types';
 import { aqlQuery } from '#queries/aqlQuery';
 import { useDispatch } from '#redux';
 
 import { StatementCheckPanel } from './StatementCheckPanel';
 import { StatementRowItem } from './StatementRowItem';
+import type { ExistingMatch } from './StatementRowItem';
 import { StatementStatsView } from './StatementStatsView';
 
 type ReviewStep = {
   name: 'review';
+  /** Changes with every statement read, to restart the suggestions */
+  readId: number;
   rows: StatementRow[];
   hasUncertainSigns: boolean;
   unrecognizedLines: UnrecognizedLine[];
   openingBalance: number | null;
   closingBalance: number | null;
   isCategorizing: boolean;
+  /** Rows that match a transaction already in the account, by row id */
+  matches: Map<string, ExistingMatch>;
 };
 
 type Step =
@@ -64,7 +72,12 @@ type Step =
   | { name: 'password'; file: ArrayBuffer; isWrong: boolean }
   | { name: 'reading'; page: number; pageCount: number }
   | ReviewStep
-  | { name: 'done'; stats: StatementStats; addedCount: number };
+  | {
+      name: 'done';
+      stats: StatementStats;
+      addedCount: number;
+      existingCount: number;
+    };
 
 export function ImportPdfPage() {
   const { t } = useTranslation();
@@ -73,9 +86,10 @@ export function ImportPdfPage() {
   const format = useFormat();
   const { id: accountId = '' } = useParams<{ id: string }>();
   const account = useAccount(accountId);
-  const { data: { list: categories = [], grouped: categoryGroups = [] } = {} } =
-    useCategories();
-  const { data: payees = [] } = usePayees();
+  const categoriesQuery = useCategories();
+  const payeesQuery = usePayees();
+  const categories = categoriesQuery.data?.list ?? [];
+  const categoryGroups = categoriesQuery.data?.grouped ?? [];
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<Step>({ name: 'choose' });
@@ -94,7 +108,6 @@ export function ImportPdfPage() {
 
   const readFile = async (file: ArrayBuffer, filePassword?: string) => {
     setStep({ name: 'reading', page: 0, pageCount: 0 });
-    let rows: StatementRow[];
     try {
       // pdf.js may detach the buffer it is given, so keep the original for a
       // retry with a password
@@ -104,7 +117,10 @@ export function ImportPdfPage() {
         onProgress: progress => setStep({ name: 'reading', ...progress }),
       });
       const statement = parseStatement(pages);
-      if (statement.transactions.length === 0) {
+      if (
+        statement.transactions.length === 0 &&
+        statement.unrecognizedLines.length === 0
+      ) {
         setStep({
           name: 'choose',
           error: t(
@@ -113,16 +129,17 @@ export function ImportPdfPage() {
         });
         return;
       }
-      rows = toStatementRows(statement.transactions);
       setFlipSigns(false);
       setStep({
         name: 'review',
-        rows,
+        readId: Date.now(),
+        rows: toStatementRows(statement.transactions),
         hasUncertainSigns: statement.hasUncertainSigns,
         unrecognizedLines: statement.unrecognizedLines,
         openingBalance: statement.openingBalance,
         closingBalance: statement.closingBalance,
         isCategorizing: true,
+        matches: new Map(),
       });
     } catch (error) {
       if (
@@ -141,33 +158,111 @@ export function ImportPdfPage() {
         name: 'choose',
         error: t('This file could not be read. Is it a PDF?'),
       });
+    }
+  };
+
+  // Suggest categories once the statement is read and the budget's
+  // categories and payees are loaded
+  const isDataReady = categoriesQuery.isSuccess && payeesQuery.isSuccess;
+  const readId = step.name === 'review' ? step.readId : null;
+  const runSuggestions = useEffectEvent(async () => {
+    if (step.name !== 'review') {
       return;
     }
-
-    const suggested = await suggestCategories(rows, {
+    const suggested = await suggestCategories(step.rows, {
       accountId,
       categories,
-      payees,
+      payees: payeesQuery.data ?? [],
       decimalPlaces,
       runRules: transaction => send('rules-run', { transaction }),
     });
     const suggestions = new Map(suggested.map(row => [row.id, row]));
-    updateReview(review => ({
-      ...review,
-      isCategorizing: false,
-      // Keep categories the user picked while suggestions were loading
-      rows: review.rows.map(row => {
-        const suggestion = suggestions.get(row.id);
-        return row.categorySource === 'user' || !suggestion
-          ? row
-          : {
-              ...row,
-              category: suggestion.category,
-              categorySource: suggestion.categorySource,
-            };
-      }),
-    }));
-  };
+    updateReview(review =>
+      review.readId !== step.readId
+        ? review
+        : {
+            ...review,
+            isCategorizing: false,
+            // Keep categories the user picked while suggestions were loading
+            rows: review.rows.map(row => {
+              const suggestion = suggestions.get(row.id);
+              return row.categorySource === 'user' || !suggestion
+                ? row
+                : {
+                    ...row,
+                    category: suggestion.category,
+                    categorySource: suggestion.categorySource,
+                  };
+            }),
+          },
+    );
+  });
+  useEffect(() => {
+    if (readId !== null && isDataReady) {
+      void runSuggestions();
+    }
+  }, [readId, isDataReady]);
+
+  const entries: ImportEntry[] =
+    step.name === 'review'
+      ? toImportEntries(step.rows, accountId, { flipSigns, decimalPlaces })
+      : [];
+
+  // Show which rows match transactions already in the account; the import
+  // would merge them instead of adding them
+  const previewKey = JSON.stringify(
+    entries.map(({ transaction }) => [
+      transaction.imported_id,
+      transaction.amount,
+      transaction.date,
+    ]),
+  );
+  const runPreview = useEffectEvent(async () => {
+    if (step.name !== 'review') {
+      return;
+    }
+    const currentReadId = step.readId;
+    const candidates = entries.filter(
+      entry => !entry.transaction.forceAddTransaction,
+    );
+    const result = await send('transactions-import', {
+      accountId,
+      transactions: candidates.map(entry => entry.transaction),
+      isPreview: true,
+    });
+    const rowIds = new Map(
+      candidates.map(entry => [entry.transaction.imported_id, entry.rowId]),
+    );
+    const matches = new Map<string, ExistingMatch>();
+    for (const preview of result.updatedPreview ?? []) {
+      const rowId = rowIds.get(preview.transaction?.imported_id);
+      if (!rowId) {
+        continue;
+      }
+      const existing = preview.existing || null;
+      matches.set(rowId, {
+        payee:
+          existing &&
+          'payee_name' in existing &&
+          typeof existing.payee_name === 'string'
+            ? existing.payee_name
+            : null,
+        date: existing ? existing.date : null,
+        amount:
+          existing && typeof existing.amount === 'number'
+            ? amountToInteger(existing.amount, decimalPlaces)
+            : null,
+      });
+    }
+    updateReview(review =>
+      review.readId === currentReadId ? { ...review, matches } : review,
+    );
+  });
+  useEffect(() => {
+    if (readId !== null) {
+      void runPreview();
+    }
+  }, [readId, previewKey]);
 
   const onFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -208,29 +303,20 @@ export function ImportPdfPage() {
     );
   };
 
-  const transactions =
-    step.name === 'review'
-      ? toImportTransactions(step.rows, accountId, { flipSigns, decimalPlaces })
-      : [];
-
   // The total of every row with an amount, selected or not, is what the
   // statement's balances must add up to
+  const toInteger = (amount: number | null) =>
+    amount === null ? null : amountToInteger(amount, decimalPlaces);
   const totalCheck =
     step.name === 'review'
       ? checkStatementTotal({
-          openingBalance:
-            step.openingBalance === null
-              ? null
-              : amountToInteger(step.openingBalance, decimalPlaces),
-          closingBalance:
-            step.closingBalance === null
-              ? null
-              : amountToInteger(step.closingBalance, decimalPlaces),
-          total: toImportTransactions(
-            step.rows.map(row => ({ ...row, isSelected: true })),
-            accountId,
-            { flipSigns, decimalPlaces },
-          ).reduce((sum, transaction) => sum + (transaction.amount ?? 0), 0),
+          openingBalance: toInteger(step.openingBalance),
+          closingBalance: toInteger(step.closingBalance),
+          total: step.rows.reduce(
+            (sum, row) =>
+              sum + (toInteger(effectiveAmount(row, flipSigns)) ?? 0),
+            0,
+          ),
         })
       : null;
 
@@ -240,6 +326,7 @@ export function ImportPdfPage() {
     }
     setIsImporting(true);
     try {
+      const transactions = entries.map(entry => entry.transaction);
       const result = await send('transactions-import', {
         accountId,
         transactions,
@@ -248,11 +335,20 @@ export function ImportPdfPage() {
       if (result.errors.length > 0) {
         throw new Error(result.errors[0].message);
       }
-      await keepChosenCategories(result.added, transactions);
+      const userCategoryRows = new Set(
+        step.rows
+          .filter(row => row.categorySource === 'user')
+          .map(row => row.id),
+      );
+      await keepChosenCategories(
+        result.added,
+        entries.filter(entry => userCategoryRows.has(entry.rowId)),
+      );
       setStep({
         name: 'done',
         stats: statementStats(transactions),
         addedCount: result.added.length,
+        existingCount: transactions.length - result.added.length,
       });
     } catch (error) {
       console.error('Failed to import PDF statement:', error);
@@ -268,6 +364,16 @@ export function ImportPdfPage() {
       setIsImporting(false);
     }
   };
+
+  // Rows that match an existing transaction are merged, not added
+  const newCount =
+    step.name === 'review'
+      ? entries.filter(
+          entry =>
+            entry.transaction.forceAddTransaction ||
+            !step.matches.has(entry.rowId),
+        ).length
+      : 0;
 
   const missingAmountCount =
     step.name === 'review'
@@ -293,13 +399,17 @@ export function ImportPdfPage() {
               <ButtonWithLoading
                 variant="primary"
                 isLoading={isImporting}
-                isDisabled={transactions.length === 0 || isImporting}
+                isDisabled={newCount === 0 || isImporting}
                 onPress={onImport}
                 style={{ height: styles.mobileMinHeight }}
               >
-                <Trans count={transactions.length}>
-                  Import {{ count: transactions.length }} transactions
-                </Trans>
+                {newCount === 0 ? (
+                  <Trans>All transactions are already in the account</Trans>
+                ) : (
+                  <Trans count={newCount}>
+                    Import {{ count: newCount }} transactions
+                  </Trans>
+                )}
               </ButtonWithLoading>
             ) : (
               <Button
@@ -416,7 +526,8 @@ export function ImportPdfPage() {
                 <Text>
                   <Trans>
                     The statement does not show which payments are expenses.
-                    Make sure the amounts below have the right sign.
+                    Make sure the amounts below have the right sign: flip all of
+                    them, or a single one with ±.
                   </Trans>
                 </Text>
                 <Button onPress={() => setFlipSigns(!flipSigns)}>
@@ -430,12 +541,14 @@ export function ImportPdfPage() {
               key={row.id}
               row={row}
               flipSigns={flipSigns}
+              showSignToggle={step.hasUncertainSigns}
               onChange={changes => updateRow(row.id, changes)}
               categoryName={
                 row.category ? (categoryNames.get(row.category) ?? null) : null
               }
               isCategorizing={step.isCategorizing}
               onPickCategory={() => pickCategory(row)}
+              match={step.matches.get(row.id) ?? null}
             />
           ))}
         </View>
@@ -449,11 +562,11 @@ export function ImportPdfPage() {
                 Imported {{ count: step.addedCount }} transactions
               </Trans>
             </Text>
-            {step.stats.count > step.addedCount && (
+            {step.existingCount > 0 && (
               <Text style={styles.smallText}>
-                <Trans count={step.stats.count - step.addedCount}>
-                  {{ count: step.stats.count - step.addedCount }} were already
-                  in the account and were not added again.
+                <Trans count={step.existingCount}>
+                  {{ count: step.existingCount }} were already in the account
+                  and were not added again.
                 </Trans>
               </Text>
             )}
@@ -475,12 +588,13 @@ export function ImportPdfPage() {
  */
 async function keepChosenCategories(
   addedIds: string[],
-  transactions: ImportTransactionEntity[],
+  entries: ImportEntry[],
 ) {
   const chosen = new Map(
-    transactions
-      .filter(transaction => transaction.imported_id && transaction.category)
-      .map(transaction => [transaction.imported_id, transaction.category]),
+    entries.map(({ transaction }) => [
+      transaction.imported_id,
+      transaction.category,
+    ]),
   );
   if (chosen.size === 0 || addedIds.length === 0) {
     return;
@@ -492,15 +606,12 @@ async function keepChosenCategories(
   );
   const updated = (
     data as Array<{ id: string; imported_id: string; category: string | null }>
-  )
-    .filter(transaction => {
-      const category = chosen.get(transaction.imported_id);
-      return category && category !== transaction.category;
-    })
-    .map(transaction => ({
-      id: transaction.id,
-      category: chosen.get(transaction.imported_id),
-    }));
+  ).flatMap(transaction => {
+    const category = chosen.get(transaction.imported_id);
+    return category && category !== transaction.category
+      ? [{ id: transaction.id, category }]
+      : [];
+  });
   if (updated.length > 0) {
     await send('transactions-batch-update', { updated });
   }

@@ -32,6 +32,9 @@ export type StatementPage = {
 export type ReviewReason =
   | 'missing-amount'
   | 'uncertain-amount'
+  | 'amount-from-balance'
+  | 'balance-mismatch'
+  | 'date-from-previous-row'
   | 'missing-description'
   | 'redacted';
 

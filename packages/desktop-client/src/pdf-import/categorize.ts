@@ -12,7 +12,7 @@ export type CategorySource = 'rule' | 'guess' | 'user';
 function normalize(text: string) {
   return text
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();

@@ -12,87 +12,124 @@ import type {
  * Bank-independent parser for the text of a PDF bank statement.
  *
  * The text is grouped into lines and cells by position. A transaction
- * starts on a line whose first cell starts with a date; its amount is taken
- * from the money column found in the table header (or, without a header,
- * the first amount on the line), and lines below it without a date are
- * added to its description.
+ * starts on a line whose first cell starts with a date (or on an undated
+ * line with an amount, for statements that print the date once per day);
+ * its amount is taken from the money column found in the table header, or
+ * the first amount on the line without a header.
+ *
+ * Every amount on the statement is accounted for: it becomes a
+ * transaction amount, a balance, or it is reported as an unrecognized
+ * line, so no money goes missing silently. Running balances are then used
+ * to fill in blacked-out amounts, fix missing signs and flag rows that do
+ * not add up.
  */
 export function parseStatement(pages: StatementPage[]): ParsedStatement {
-  const transactions: ParsedStatementTransaction[] = [];
+  const pending: PendingTransaction[] = [];
   const unrecognizedLines: UnrecognizedLine[] = [];
   let openingBalance: number | null = null;
   let closingBalance: number | null = null;
   let columns: Column[] | null = null;
   // Where dates of transaction rows start, so dates elsewhere are ignored
   let dateX: number | null = null;
+  let lastDate: string | null = null;
   let hasSignedAmounts = false;
   let usesDebitCreditColumns = false;
 
   for (const [pageIndex, page] of pages.entries()) {
+    const pageNumber = pageIndex + 1;
     if (page.isUnreadable) {
       unrecognizedLines.push({
-        page: pageIndex + 1,
+        page: pageNumber,
         text: '',
         reason: 'unreadable-page',
       });
     }
+
     const lines = groupLines(page.items);
+    const consumed = new Set<Cell>();
     let current: PendingTransaction | null = null;
 
-    const finish = () => {
-      if (current) {
-        transactions.push(toTransaction(current));
-        current = null;
-      }
+    const start = (transaction: PendingTransaction) => {
+      pending.push(transaction);
+      lastDate = transaction.date;
+      return transaction;
     };
 
-    const takeAmount = (amount: PickedAmount | null) => {
-      if (amount?.signed) {
+    const takeAmount = (amount: ClassifiedAmount) => {
+      consumed.add(amount.cell);
+      if (amount.signed) {
         hasSignedAmounts = true;
       }
-      if (amount?.fromDebitCreditColumn) {
+      if (amount.kind === 'debit' || amount.kind === 'credit') {
         usesDebitCreditColumns = true;
       }
-      return amount?.value ?? null;
+      return amount.value;
+    };
+
+    const isLeftAligned = (line: Line) => {
+      const first = line.cells[0];
+      return (
+        !!first &&
+        (dateX !== null ? first.x <= dateX + 20 : first.x < page.width * 0.25)
+      );
     };
 
     for (const line of lines) {
-      const header = parseHeader(line);
-      if (header) {
-        finish();
-        columns = header;
-        const dateColumn = header.find(column => column.kind === 'date');
-        dateX = dateColumn ? dateColumn.left : dateX;
-        continue;
-      }
-
-      const summary = parseSummaryLine(line);
-      if (summary) {
-        finish();
-        if (summary.kind === 'opening') {
-          openingBalance ??= summary.amount;
-        } else if (summary.kind === 'closing') {
-          closingBalance = summary.amount ?? closingBalance;
-        }
-        continue;
-      }
-
+      const amounts = classifyAmounts(findAmounts(line), columns);
       const date = findLeadingDate(line, dateX);
-      if (date) {
-        const amounts = findAmounts(line, date.cell);
-        if (amounts.length === 0 && !columns) {
-          // Dates outside of a transaction table, e.g. the statement period
-          finish();
+
+      if (!date) {
+        const header = parseHeader(line);
+        if (header) {
+          current = null;
+          columns = header;
+          dateX = header.find(column => column.kind === 'date')?.left ?? dateX;
           continue;
         }
+      }
 
-        finish();
+      // Balances and totals: at the left edge without a date, or a dated
+      // row that only states a balance ("31.03.2026 Konečný zůstatek")
+      const summary =
+        isLeftAligned(line) &&
+        parseSummary(line, date ? 'balance-only' : 'any');
+      if (summary) {
+        current = null;
+        const values = amounts.filter(amount => amount.value !== 0);
+        if (summary.opening && values.length > 0) {
+          openingBalance ??= values[0].value;
+        }
+        if (summary.closing && values.length > 0) {
+          closingBalance = values[values.length - 1].value;
+        }
+        amounts.forEach(amount => consumed.add(amount.cell));
+        continue;
+      }
+
+      if (date) {
+        current = null;
+        const hasMoneyCell = columns
+          ? amounts.length > 0 || hasTextInMoneyColumn(line, columns, date)
+          : amounts.length > 0;
+        if (!columns && amounts.length === 0 && pending.length === 0) {
+          // Dates before the transaction table, e.g. the statement period
+          continue;
+        }
         dateX ??= date.cell.x;
-        const picked = pickAmount(amounts, columns);
+        const money = amounts.find(amount => amount.isMoney);
+        const balance = amounts.find(amount => amount.kind === 'balance');
+        if (balance) {
+          consumed.add(balance.cell);
+        }
+        amounts
+          .filter(amount => amount.value === 0)
+          .forEach(amount => consumed.add(amount.cell));
         const isRedacted = overlapsRedaction(line, page.redactions);
-        current = {
+        current = start({
           date: date.value,
-          amount: takeAmount(picked),
+          amount: money ? takeAmount(money) : null,
+          balance: balance?.value ?? null,
+          hasMoneyCell,
           // Without a header, a single amount on a row with a blacked-out
           // area may well be the balance
           isAmountUncertain: !columns && isRedacted && amounts.length === 1,
@@ -100,96 +137,122 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
           descriptionLines: [
             descriptionOf(
               line,
-              amounts.map(amount => amount.cell),
+              [
+                ...amounts.map(amount => amount.cell),
+                // Unreadable amounts are not part of the description
+                ...(columns ? moneyColumnCells(line, columns, date) : []),
+              ],
               date,
             ),
           ].filter(Boolean),
           bottom: line.y + line.height,
-        };
+        });
         continue;
       }
 
-      const lineAmounts = findAmounts(line);
-      const startsWithDate =
-        !!line.cells[0] && !!parseLeadingDate(line.cells[0].text);
-      const picked = columns ? pickAmount(lineAmounts, columns) : null;
+      // An undated line
+      if (current && line.y - current.bottom > line.height * 2.5) {
+        current = null;
+      }
+      const isForeignInfo = (amount: ClassifiedAmount) =>
+        !!amount.currency && current !== null && current.amount !== null;
+      const money = amounts.find(
+        amount => amount.isMoney && !isForeignInfo(amount),
+      );
+      const balance = amounts.find(amount => amount.kind === 'balance');
 
       if (
         current &&
-        (line.y - current.bottom > line.height * 2.5 ||
-          // A dated row outside the date column is reported, not merged
-          (startsWithDate && lineAmounts.length > 0))
+        current.amount === null &&
+        !current.hasMoneyCell &&
+        !current.isRedacted
       ) {
-        finish();
+        // Some layouts put the amount on the second line of a row
+        if (money) {
+          current.amount = takeAmount(money);
+          current.hasMoneyCell = true;
+          if (balance) {
+            consumed.add(balance.cell);
+            current.balance = balance.value;
+          }
+          appendDescription(current, line, [money.cell, balance?.cell]);
+          current.isRedacted ||= overlapsRedaction(line, page.redactions);
+          current.bottom = line.y + line.height;
+          continue;
+        }
       }
 
-      if (
-        current &&
-        picked &&
-        (current.amount !== null || current.isRedacted)
-      ) {
+      if ((money || balance) && (current || lastDate)) {
         // Statements that print the date once per day list further
-        // transactions of that day without a date. A row whose amount was
-        // blacked out never takes the next row's amount.
-        const sameDay: string = current.date;
-        finish();
-        current = {
-          date: sameDay,
-          amount: takeAmount(picked),
-          isAmountUncertain: false,
-          isRedacted: overlapsRedaction(line, page.redactions),
+        // transactions without a date. A row whose amount was blacked out
+        // never takes the next row's amount: this line is its own row.
+        // A row may carry its own date outside the date column
+        const ownDate = parseLeadingDate(line.cells[0]?.text ?? '');
+        const date: string = ownDate?.value ?? current?.date ?? lastDate ?? '';
+        const isRedacted = overlapsRedaction(line, page.redactions);
+        if (balance) {
+          consumed.add(balance.cell);
+        }
+        current = start({
+          date,
+          amount: money ? takeAmount(money) : null,
+          balance: balance?.value ?? null,
+          hasMoneyCell: true,
+          // Without a header any amount could be extra information
+          isAmountUncertain: !columns,
+          isDateFromPreviousRow: !ownDate,
+          isRedacted,
           descriptionLines: [
             descriptionOf(
               line,
-              lineAmounts.map(amount => amount.cell),
+              amounts.map(amount => amount.cell),
+              ownDate ? { ...ownDate, cell: line.cells[0] } : undefined,
             ),
           ].filter(Boolean),
           bottom: line.y + line.height,
-        };
+        });
         continue;
       }
 
       if (current) {
-        // Some layouts put the amount on the second line of a row
-        let amountCells: Cell[] = [];
-        if (current.amount === null && picked) {
-          current.amount = takeAmount(picked);
-          amountCells = lineAmounts.map(amount => amount.cell);
-        }
-        const text = descriptionOf(line, amountCells);
-        if (text) {
-          current.descriptionLines.push(text);
-        }
+        // Amounts in another currency are extra information of the row
+        amounts
+          .filter(amount => isForeignInfo(amount) || amount.value === 0)
+          .forEach(amount => consumed.add(amount.cell));
+        appendDescription(current, line, []);
         current.isRedacted ||= overlapsRedaction(line, page.redactions);
         current.bottom = line.y + line.height;
-        continue;
       }
+    }
 
-      // Anything else with an amount (or a date in the table) might be a
-      // transaction we could not read
-      const hasAmount = lineAmounts.some(amount => amount.value !== 0);
-      if (
-        (hasAmount || (columns && startsWithDate)) &&
-        !mentionsBalance(line)
-      ) {
+    // Report every line with an amount that ended up nowhere
+    for (const line of lines) {
+      const isUnaccounted = findAmounts(line).some(
+        amount => amount.value !== 0 && !consumed.has(amount.cell),
+      );
+      if (isUnaccounted) {
         unrecognizedLines.push({
-          page: pageIndex + 1,
+          page: pageNumber,
           text: line.cells.map(cell => cell.text).join('  '),
           reason: 'unmatched-line',
         });
       }
     }
-
-    finish();
   }
 
+  const signsKnown = hasSignedAmounts || usesDebitCreditColumns;
+  const { signsResolved } = applyRunningBalances(pending, {
+    openingBalance,
+    fixSigns: !signsKnown,
+  });
+
+  const transactions = pending.map(toTransaction);
   return {
     transactions,
     unrecognizedLines,
     openingBalance,
     closingBalance,
-    hasUncertainSigns:
-      transactions.length > 0 && !hasSignedAmounts && !usesDebitCreditColumns,
+    hasUncertainSigns: transactions.length > 0 && !signsKnown && !signsResolved,
   };
 }
 
@@ -212,14 +275,15 @@ type Column = { kind: ColumnKind; left: number; center: number };
 type FoundAmount = {
   value: number;
   signed: boolean;
+  currency: string | null;
   cell: Cell;
 };
 
-type PickedAmount = {
-  value: number;
-  signed: boolean;
-  fromDebitCreditColumn: boolean;
-  cell: Cell;
+type ClassifiedAmount = FoundAmount & {
+  /** Nearest header column, or null without a header */
+  kind: ColumnKind | null;
+  /** Usable as a transaction amount (with the sign of its column) */
+  isMoney: boolean;
 };
 
 type FoundDate = {
@@ -232,8 +296,16 @@ type FoundDate = {
 type PendingTransaction = {
   date: string;
   amount: number | null;
+  /** Running balance printed on the row */
+  balance: number | null;
+  /** The row has something in a money column, readable or not */
+  hasMoneyCell: boolean;
   isAmountUncertain: boolean;
   isRedacted: boolean;
+  isAmountFromBalance?: boolean;
+  isBalanceMismatch?: boolean;
+  /** Undated row that took the date of the row above */
+  isDateFromPreviousRow?: boolean;
   descriptionLines: string[];
   bottom: number;
 };
@@ -290,7 +362,7 @@ export function groupLines(items: StatementTextItem[]): Line[] {
 function normalize(text: string) {
   return text
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 }
 
@@ -321,9 +393,19 @@ const headerKinds: Array<{ kind: ColumnKind; pattern: RegExp }> = [
   },
 ];
 
+const moneyKinds: ColumnKind[] = ['amount', 'debit', 'credit'];
+
+/**
+ * A table header: labels only, with a date column and a money column.
+ * Requiring the date column keeps description lines like
+ * "Odchozí úhrada | VS: 123" from being taken for a header.
+ */
 function parseHeader(line: Line): Column[] | null {
-  // A row with a date or an amount is data, even with a "Debet" type cell
-  if (line.cells.some(cell => parseDate(cell.text) || parseAmount(cell.text))) {
+  if (
+    line.cells.some(
+      cell => parseLeadingDate(cell.text) || parseAmount(cell.text),
+    )
+  ) {
     return null;
   }
 
@@ -340,41 +422,44 @@ function parseHeader(line: Line): Column[] | null {
     }
   }
 
+  const hasDateColumn = columns.some(column => column.kind === 'date');
   const hasMoneyColumn = columns.some(column =>
-    ['amount', 'debit', 'credit'].includes(column.kind),
+    moneyKinds.includes(column.kind),
   );
-  return columns.length >= 2 && hasMoneyColumn ? columns : null;
+  return hasDateColumn && hasMoneyColumn ? columns : null;
 }
 
-const summaryPattern =
-  /^(pocatecni|konecny|celkem|soucet|souhrn|obraty|zustatek|stav uctu|opening|closing|total|balance|strana|page)\b/;
 const openingPattern =
-  /^(pocatecni (zustatek|stav)|zustatek na zacatku|predchozi zustatek|opening balance|previous balance|starting balance)/;
+  /^(pocatecni (zustatek|stav)|zustatek na zacatku|predchozi zustatek|opening balance|previous balance|starting balance|beginning balance)/;
 const closingPattern =
   /^(konecny (zustatek|stav)|zustatek na konci|novy zustatek|closing balance|ending balance|new balance)/;
+const otherSummaryPattern =
+  /^(celkem|soucet|souhrn|obraty|zustatek|disponibilni zustatek|blokovane|stav uctu|total|balance|strana|page)\b/;
 
-/** Totals, balances and page footers, which are not transactions. */
-function parseSummaryLine(
+/**
+ * Balances and totals. In 'balance-only' mode (dated rows) only phrases
+ * about a balance count, so a payee like "TOTAL BENZINA" stays a payment.
+ */
+function parseSummary(
   line: Line,
-): { kind: 'opening' | 'closing' | 'other'; amount: number | null } | null {
+  mode: 'any' | 'balance-only',
+): { opening: boolean; closing: boolean } | null {
   const texts = line.cells.map(cell => normalize(cell.text));
-  if (!texts.some(text => summaryPattern.test(text))) {
-    return null;
+  const opening = texts.some(text => openingPattern.test(text));
+  const closing = texts.some(text => closingPattern.test(text));
+  if (opening || closing) {
+    return { opening, closing };
   }
-  const amounts = findAmounts(line);
-  const amount = amounts.length > 0 ? amounts[amounts.length - 1].value : null;
-  const kind = texts.some(text => openingPattern.test(text))
-    ? 'opening'
-    : texts.some(text => closingPattern.test(text))
-      ? 'closing'
-      : 'other';
-  return { kind, amount };
-}
-
-function mentionsBalance(line: Line) {
-  return line.cells.some(cell =>
-    /zustatek|balance|saldo/.test(normalize(cell.text)),
-  );
+  if (mode === 'any' && otherSummaryPattern.test(texts[0] ?? '')) {
+    return { opening: false, closing: false };
+  }
+  if (
+    mode === 'balance-only' &&
+    texts.some(text => /^(zustatek|balance)\b/.test(text))
+  ) {
+    return { opening: false, closing: false };
+  }
+  return null;
 }
 
 const datePatterns: Array<{
@@ -456,31 +541,34 @@ function findLeadingDate(line: Line, dateX: number | null): FoundDate | null {
   return null;
 }
 
-const amountPattern =
-  /^([+\-−]?)\s?(?:CZK|Kč|EUR|€|USD|\$)?\s?(\d{1,3}(?:[   .,'’]\d{3})*|\d+)[.,](\d{2})\s?(?:CZK|Kč|EUR|€|USD|\$)?\s?(-?)$/i;
+const currencyPattern = 'CZK|Kč|EUR|€|USD|\\$|GBP|£|PLN|zł|CHF|HUF|Ft';
+const amountPattern = new RegExp(
+  `^([+\\-\\u2212]?)\\s?(${currencyPattern})?\\s?(\\d{1,3}(?:[ \\u00a0\\u202f.,'’]\\d{3})*|\\d+)[.,](\\d{2})\\s?(${currencyPattern})?\\s?(-?)$`,
+  'i',
+);
 
 export function parseAmount(
   text: string,
-): { value: number; signed: boolean } | null {
+): { value: number; signed: boolean; currency: string | null } | null {
   const match = text.trim().match(amountPattern);
   if (!match) {
     return null;
   }
-  const [, leadingSign, integerPart, fraction, trailingMinus] = match;
+  const [, leadingSign, prefixCurrency, integerPart, fraction, suffixCurrency] =
+    match;
+  const trailingMinus = match[6];
   const value = Number(`${integerPart.replace(/\D/g, '')}.${fraction}`);
   const isNegative = leadingSign === '-' || leadingSign === '−';
   return {
     value: isNegative || trailingMinus ? -value : value,
     signed: leadingSign !== '' || trailingMinus !== '',
+    currency: prefixCurrency ?? suffixCurrency ?? null,
   };
 }
 
-function findAmounts(line: Line, dateCell?: Cell): FoundAmount[] {
+function findAmounts(line: Line): FoundAmount[] {
   const amounts: FoundAmount[] = [];
   for (const cell of line.cells) {
-    if (cell === dateCell) {
-      continue;
-    }
     const amount = parseAmount(cell.text);
     if (amount) {
       amounts.push({ ...amount, cell });
@@ -489,65 +577,70 @@ function findAmounts(line: Line, dateCell?: Cell): FoundAmount[] {
   return amounts;
 }
 
-function pickAmount(
-  amounts: FoundAmount[],
-  columns: Column[] | null,
-): PickedAmount | null {
-  if (amounts.length === 0) {
-    return null;
-  }
-
-  if (columns && columns.length > 0) {
-    // Assign every amount to its nearest header column and use the first
-    // one in a money column. Zeros fill unused debit/credit columns. When
-    // only the balance is left (the amount was blacked out), there is no
-    // amount rather than a wrong one.
-    for (const amount of amounts) {
-      if (amount.value === 0) {
-        continue;
-      }
-      const center = amount.cell.x + amount.cell.width / 2;
-      let nearest = columns[0];
-      for (const column of columns) {
-        if (
-          Math.abs(center - column.center) < Math.abs(center - nearest.center)
-        ) {
-          nearest = column;
-        }
-      }
-
-      const magnitude = Math.abs(amount.value);
-      switch (nearest.kind) {
-        case 'debit':
-          return {
-            value: -magnitude,
-            signed: true,
-            fromDebitCreditColumn: true,
-            cell: amount.cell,
-          };
-        case 'credit':
-          return {
-            value: magnitude,
-            signed: true,
-            fromDebitCreditColumn: true,
-            cell: amount.cell,
-          };
-        case 'amount':
-          return { ...amount, fromDebitCreditColumn: false };
-        default:
-          break;
-      }
+function nearestColumn(cell: Cell, columns: Column[]): Column {
+  const center = cell.x + cell.width / 2;
+  let nearest = columns[0];
+  for (const column of columns) {
+    if (Math.abs(center - column.center) < Math.abs(center - nearest.center)) {
+      nearest = column;
     }
-    return null;
   }
-
-  // Without a header, the first amount is the transaction amount and a
-  // later one is usually the running balance
-  return { ...amounts[0], fromDebitCreditColumn: false };
+  return nearest;
 }
 
-/** Text of a line without its date and the cells of the given amounts. */
-function descriptionOf(line: Line, amountCells: Cell[], date?: FoundDate) {
+/**
+ * Assign amounts to their header columns. Money columns give the sign
+ * (debit is negative); zeros only fill unused debit/credit columns.
+ * Without a header, the first amount is the transaction amount and a
+ * later one is usually the running balance.
+ */
+function classifyAmounts(
+  amounts: FoundAmount[],
+  columns: Column[] | null,
+): ClassifiedAmount[] {
+  if (!columns) {
+    return amounts.map((amount, index) => ({
+      ...amount,
+      kind: null,
+      isMoney: index === 0 && amount.value !== 0,
+    }));
+  }
+  return amounts.map(amount => {
+    const { kind } = nearestColumn(amount.cell, columns);
+    const magnitude = Math.abs(amount.value);
+    if (kind === 'debit' || kind === 'credit') {
+      return {
+        ...amount,
+        kind,
+        value: kind === 'debit' ? -magnitude : magnitude,
+        signed: true,
+        isMoney: magnitude !== 0,
+      };
+    }
+    return { ...amount, kind, isMoney: kind === 'amount' && magnitude !== 0 };
+  });
+}
+
+/** Cells with numbers (even unreadable) in a money or balance column. */
+function moneyColumnCells(line: Line, columns: Column[], date: FoundDate) {
+  return line.cells.filter(
+    cell =>
+      cell !== date.cell &&
+      [...moneyKinds, 'balance'].includes(nearestColumn(cell, columns).kind) &&
+      /\d/.test(cell.text),
+  );
+}
+
+function hasTextInMoneyColumn(line: Line, columns: Column[], date: FoundDate) {
+  return moneyColumnCells(line, columns, date).length > 0;
+}
+
+/** Text of a line without its date and the given amount cells. */
+function descriptionOf(
+  line: Line,
+  amountCells: Array<Cell | undefined>,
+  date?: FoundDate,
+) {
   return line.cells
     .filter(cell => !amountCells.includes(cell))
     .map(cell =>
@@ -558,11 +651,98 @@ function descriptionOf(line: Line, amountCells: Cell[], date?: FoundDate) {
     .trim();
 }
 
+function appendDescription(
+  transaction: PendingTransaction,
+  line: Line,
+  amountCells: Array<Cell | undefined>,
+) {
+  const text = descriptionOf(line, amountCells);
+  if (text) {
+    transaction.descriptionLines.push(text);
+  }
+}
+
 function overlapsRedaction(line: Line, redactions: StatementRect[]) {
   return redactions.some(
     rect =>
       rect.y < line.y + line.height + 1 && rect.y + rect.height > line.y - 1,
   );
+}
+
+const round = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * Use the running balance printed on the rows: the change between two
+ * rows is the amount of the second. That fills in blacked-out amounts,
+ * gives unsigned statements their signs and flags rows that do not add up.
+ * Statements listed newest first are detected and read in reverse.
+ */
+function applyRunningBalances(
+  transactions: PendingTransaction[],
+  {
+    openingBalance,
+    fixSigns,
+  }: { openingBalance: number | null; fixSigns: boolean },
+): { signsResolved: boolean } {
+  const withBalance = transactions.filter(t => t.balance !== null);
+  if (withBalance.length < 2 && openingBalance === null) {
+    return { signsResolved: false };
+  }
+
+  const countMatches = (ordered: PendingTransaction[]) => {
+    let matches = 0;
+    for (let i = 1; i < ordered.length; i++) {
+      const [previous, row] = [ordered[i - 1], ordered[i]];
+      if (
+        previous.balance === null ||
+        row.balance === null ||
+        row.amount === null
+      ) {
+        continue;
+      }
+      const change = round(row.balance - previous.balance);
+      if (
+        fixSigns
+          ? Math.abs(change) === Math.abs(row.amount)
+          : change === row.amount
+      ) {
+        matches++;
+      }
+    }
+    return matches;
+  };
+  const reversed = [...transactions].reverse();
+  const ordered =
+    countMatches(reversed) > countMatches(transactions)
+      ? reversed
+      : transactions;
+
+  let previousBalance = ordered === transactions ? openingBalance : null;
+  let unresolvedSigns = 0;
+  for (const row of ordered) {
+    if (row.balance !== null && previousBalance !== null) {
+      const change = round(row.balance - previousBalance);
+      if (row.amount === null) {
+        if (!row.isAmountUncertain) {
+          row.amount = change;
+          row.isAmountFromBalance = true;
+        }
+      } else if (fixSigns && Math.abs(row.amount) === Math.abs(change)) {
+        row.amount = change;
+      } else if (row.amount !== change) {
+        row.isBalanceMismatch = true;
+        if (fixSigns) unresolvedSigns++;
+      }
+    } else if (fixSigns) {
+      unresolvedSigns++;
+    }
+    previousBalance =
+      row.balance ??
+      (previousBalance !== null && row.amount !== null
+        ? round(previousBalance + row.amount)
+        : null);
+  }
+  return { signsResolved: fixSigns && unresolvedSigns === 0 };
 }
 
 const transactionTypePattern =
@@ -586,8 +766,16 @@ function toTransaction(
   const reviewReasons: ReviewReason[] = [];
   if (pending.amount === null) {
     reviewReasons.push('missing-amount');
+  } else if (pending.isAmountFromBalance) {
+    reviewReasons.push('amount-from-balance');
   } else if (pending.isAmountUncertain) {
     reviewReasons.push('uncertain-amount');
+  }
+  if (pending.isBalanceMismatch) {
+    reviewReasons.push('balance-mismatch');
+  }
+  if (pending.isDateFromPreviousRow) {
+    reviewReasons.push('date-from-previous-row');
   }
   if (lines.length === 0) {
     reviewReasons.push('missing-description');

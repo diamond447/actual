@@ -42,18 +42,27 @@ describe('parseDate', () => {
 
 describe('parseAmount', () => {
   it('parses Czech and English formats', () => {
-    expect(parseAmount('-1 234,56')).toEqual({ value: -1234.56, signed: true });
-    expect(parseAmount('1 234,56 CZK')).toEqual({
-      value: 1234.56,
-      signed: false,
-    });
-    expect(parseAmount('+250,00 Kč')).toEqual({ value: 250, signed: true });
-    expect(parseAmount('1,234.56')).toEqual({ value: 1234.56, signed: false });
-    expect(parseAmount('−1.234,56')).toEqual({
+    expect(parseAmount('-1 234,56')).toMatchObject({
       value: -1234.56,
       signed: true,
     });
-    expect(parseAmount('99,90-')).toEqual({ value: -99.9, signed: true });
+    expect(parseAmount('1 234,56 CZK')).toMatchObject({
+      value: 1234.56,
+      signed: false,
+    });
+    expect(parseAmount('+250,00 Kč')).toMatchObject({
+      value: 250,
+      signed: true,
+    });
+    expect(parseAmount('1,234.56')).toMatchObject({
+      value: 1234.56,
+      signed: false,
+    });
+    expect(parseAmount('−1.234,56')).toMatchObject({
+      value: -1234.56,
+      signed: true,
+    });
+    expect(parseAmount('99,90-')).toMatchObject({ value: -99.9, signed: true });
   });
 
   it('rejects numbers that are not amounts', () => {
@@ -245,11 +254,12 @@ describe('parseStatement', () => {
         reviewReasons: ['missing-description', 'redacted'],
       },
       {
+        // Filled in from the change of the running balance
         date: '2026-03-05',
-        amount: null,
+        amount: -120,
         payee: 'Nájem',
         notes: 'Nájem',
-        reviewReasons: ['missing-amount'],
+        reviewReasons: ['amount-from-balance'],
       },
     ]);
   });
@@ -387,7 +397,13 @@ describe('parseStatement', () => {
       ),
     ]);
 
-    expect(result.transactions.map(t => t.amount)).toEqual([-312, null]);
+    // The blacked-out amount comes from the balance, never the balance itself
+    expect(
+      result.transactions.map(t => [t.amount, t.reviewReasons[0]]),
+    ).toEqual([
+      [-312, undefined],
+      [-8688, 'amount-from-balance'],
+    ]);
   });
 
   it('keeps the description that shares a cell with the date', () => {
@@ -432,9 +448,10 @@ describe('parseStatement', () => {
     ]);
   });
 
-  it('reports lines with money that are not transactions', () => {
+  it('accounts for every amount on the statement', () => {
     const result = parseStatement([
       page([
+        line(60, [40, 'Kontokorent'], [300, '5 000,00']),
         header,
         line(
           120,
@@ -450,7 +467,7 @@ describe('parseStatement', () => {
           [300, 'Posunutý řádek'],
           [400, '-10,00'],
         ),
-        line(240, [40, 'Disponibilní zůstatek'], [500, '862,00']),
+        line(240, [40, 'Disponibilní zůstatek'], [500, '852,00']),
       ]),
       {
         width: 595,
@@ -461,19 +478,129 @@ describe('parseStatement', () => {
       },
     ]);
 
-    expect(result.transactions).toHaveLength(1);
+    expect(
+      result.transactions.map(t => [
+        t.date,
+        t.payee,
+        t.amount,
+        t.reviewReasons,
+      ]),
+    ).toEqual([
+      ['2026-03-02', 'Kavárna', -89, []],
+      [
+        '2026-03-02',
+        'Poplatek za vedení účtu',
+        -49,
+        ['date-from-previous-row'],
+      ],
+      ['2026-03-03', 'Posunutý řádek', -10, []],
+    ]);
     expect(result.unrecognizedLines).toEqual([
-      {
-        page: 1,
-        text: 'Poplatek za vedení účtu  -49,00',
-        reason: 'unmatched-line',
-      },
-      {
-        page: 1,
-        text: '03.03.2026  Posunutý řádek  -10,00',
-        reason: 'unmatched-line',
-      },
+      { page: 1, text: 'Kontokorent  5 000,00', reason: 'unmatched-line' },
       { page: 2, text: '', reason: 'unreadable-page' },
+    ]);
+  });
+
+  it('keeps payees that start like a summary', () => {
+    const result = parseStatement([
+      page([
+        header,
+        line(
+          120,
+          [40, '05.03.2026'],
+          [100, 'TOTAL BENZINA PRAHA'],
+          [400, '-1 200,00'],
+        ),
+        line(129, [100, 'Celkem natankováno 30 l']),
+      ]),
+    ]);
+
+    expect(result.transactions).toMatchObject([
+      {
+        payee: 'TOTAL BENZINA PRAHA',
+        amount: -1200,
+        notes: 'TOTAL BENZINA PRAHA · Celkem natankováno 30 l',
+      },
+    ]);
+  });
+
+  it('fills in amounts and signs from the running balance', () => {
+    const result = parseStatement([
+      page([
+        line(80, [40, 'Předchozí zůstatek'], [500, '1 000,00']),
+        line(
+          100,
+          [40, 'Datum'],
+          [100, 'Popis'],
+          [400, 'Částka'],
+          [500, 'Zůstatek'],
+        ),
+        line(
+          120,
+          [40, '02.03.2026'],
+          [100, 'Výplata'],
+          [400, '500,00'],
+          [500, '1 500,00'],
+        ),
+        line(
+          140,
+          [40, '03.03.2026'],
+          [100, 'Albert'],
+          [400, '200,00'],
+          [500, '1 300,00'],
+        ),
+        line(
+          160,
+          [40, '04.03.2026'],
+          [100, 'Billa'],
+          [400, '1 2OO,00'],
+          [500, '1 250,00'],
+        ),
+        line(180, [40, 'Nový zůstatek'], [500, '1 250,00']),
+      ]),
+    ]);
+
+    expect(
+      result.transactions.map(t => [t.payee, t.amount, t.reviewReasons]),
+    ).toEqual([
+      ['Výplata', 500, []],
+      ['Albert', -200, []],
+      // The garbled amount is not taken from elsewhere: it is computed
+      ['Billa', -50, ['amount-from-balance']],
+    ]);
+    expect(result.hasUncertainSigns).toBe(false);
+    expect([result.openingBalance, result.closingBalance]).toEqual([
+      1000, 1250,
+    ]);
+  });
+
+  it('reads statements listed newest first', () => {
+    const result = parseStatement([
+      page([
+        header,
+        line(
+          120,
+          [40, '03.03.2026'],
+          [100, 'Albert'],
+          [400, '-200,00'],
+          [500, '1 300,00'],
+        ),
+        line(140, [40, '02.03.2026'], [100, 'Nájem'], [500, '1 500,00']),
+        line(
+          160,
+          [40, '01.03.2026'],
+          [100, 'Výplata'],
+          [400, '500,00'],
+          [500, '1 000,00'],
+        ),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => [t.payee, t.amount])).toEqual([
+      ['Albert', -200],
+      // Read oldest first: 1 000 → 1 500
+      ['Nájem', 500],
+      ['Výplata', 500],
     ]);
   });
 

@@ -17,24 +17,37 @@ import { Checkbox } from '#components/forms';
 import { InputField } from '#components/mobile/MobileForms';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
+import { effectiveAmount } from '#pdf-import/toImportTransactions';
 import type { StatementRow } from '#pdf-import/toImportTransactions';
+
+/** An existing transaction the row would be merged with on import. */
+export type ExistingMatch = {
+  payee: string | null;
+  date: string | null;
+  /** Integer amount, or null when the import would leave it unchanged */
+  amount: number | null;
+};
 
 type StatementRowItemProps = {
   row: StatementRow;
   flipSigns: boolean;
+  showSignToggle: boolean;
   onChange: (changes: Partial<StatementRow>) => void;
   categoryName: string | null;
   isCategorizing: boolean;
   onPickCategory: () => void;
+  match: ExistingMatch | null;
 };
 
 export function StatementRowItem({
   row,
   flipSigns,
+  showSignToggle,
   onChange,
   categoryName,
   isCategorizing,
   onPickCategory,
+  match,
 }: StatementRowItemProps) {
   const { t } = useTranslation();
   const format = useFormat();
@@ -42,15 +55,9 @@ export function StatementRowItem({
   const [amountText, setAmountText] = useState('');
   const [isIncome, setIsIncome] = useState(false);
 
-  const needsAmount = row.reviewReasons.includes('missing-amount');
-  const isAmountUncertain = row.reviewReasons.includes('uncertain-amount');
-  const isRedacted = row.reviewReasons.includes('redacted');
-  const displayAmount =
-    row.amount === null
-      ? null
-      : flipSigns && !row.isAmountManual
-        ? -row.amount
-        : row.amount;
+  const reasons = new Set(row.reviewReasons);
+  const needsAmount = reasons.has('missing-amount');
+  const displayAmount = effectiveAmount(row, flipSigns);
   const checkboxId = `statement-row-${row.id}`;
 
   // Typed amounts are final: the sign comes from the expense/income choice
@@ -66,6 +73,51 @@ export function StatementRowItem({
       isSelected: magnitude !== null && magnitude !== 0,
     });
   };
+
+  const details = match
+    ? [
+        match.payee,
+        match.date && monthUtils.format(match.date, dateFormat),
+        match.amount !== null && format(match.amount, 'financial'),
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+
+  const notes: Array<{ key: string; text: string }> = [];
+  if (reasons.has('redacted')) {
+    notes.push({ key: 'redacted', text: t('Some details are blacked out.') });
+  }
+  if (reasons.has('uncertain-amount')) {
+    notes.push({
+      key: 'uncertain',
+      text: t(
+        'This amount may be the account balance. Check it before importing.',
+      ),
+    });
+  }
+  if (reasons.has('amount-from-balance')) {
+    notes.push({
+      key: 'from-balance',
+      text: t(
+        'The amount could not be read and was calculated from the account balance on the statement.',
+      ),
+    });
+  }
+  if (reasons.has('balance-mismatch')) {
+    notes.push({
+      key: 'mismatch',
+      text: t(
+        'The amount does not match the change of the balance on the statement. Check it.',
+      ),
+    });
+  }
+  if (reasons.has('date-from-previous-row')) {
+    notes.push({
+      key: 'date',
+      text: t('The row has no date; the date of the row above is used.'),
+    });
+  }
 
   return (
     <View
@@ -115,22 +167,52 @@ export function StatementRowItem({
             (isCategorizing ? t('Finding category…') : t('Choose category'))}
           {row.categorySource === 'guess' && (
             <Text style={{ color: theme.pageTextSubdued }}>
-              {'\u00a0· '}
+              {' · '}
               <Trans>suggested</Trans>
             </Text>
           )}
         </Button>
-        {isRedacted && (
-          <Text style={{ color: theme.warningText, ...styles.smallText }}>
-            <Trans>Some details are blacked out.</Trans>
+        {notes.map(note => (
+          <Text
+            key={note.key}
+            style={{ color: theme.warningText, ...styles.smallText }}
+          >
+            {note.text}
           </Text>
-        )}
-        {isAmountUncertain && (
-          <Text style={{ color: theme.warningText, ...styles.smallText }}>
-            <Trans>
-              This amount may be the account balance. Check it before importing.
-            </Trans>
-          </Text>
+        ))}
+        {match && row.isSelected && (
+          <View style={{ marginTop: 4, gap: 4 }}>
+            <Text style={{ color: theme.pageTextSubdued, ...styles.smallText }}>
+              {row.forceAdd ? (
+                <Trans>
+                  It will be added as a new transaction, although a similar one
+                  is already in the account.
+                </Trans>
+              ) : details ? (
+                <>
+                  <Trans>Already in the account, it will not be added:</Trans>{' '}
+                  {details}
+                </>
+              ) : (
+                <Trans>Already in the account, it will not be added.</Trans>
+              )}
+            </Text>
+            <Button
+              variant="bare"
+              onPress={() => onChange({ forceAdd: !row.forceAdd })}
+              style={{
+                alignSelf: 'flex-start',
+                color: theme.pageTextLink,
+                ...styles.smallText,
+              }}
+            >
+              {row.forceAdd ? (
+                <Trans>Do not add it</Trans>
+              ) : (
+                <Trans>It is a different payment, add it</Trans>
+              )}
+            </Button>
+          </View>
         )}
         {needsAmount && (
           <View style={{ marginTop: 6, gap: 6 }}>
@@ -165,17 +247,29 @@ export function StatementRowItem({
         )}
       </View>
       {displayAmount !== null && (
-        <FinancialText
-          style={{
-            fontWeight: 600,
-            color: displayAmount < 0 ? theme.pageText : theme.noticeTextLight,
-          }}
-        >
-          {format(
-            amountToInteger(displayAmount, format.currency.decimalPlaces),
-            'financial',
+        <View style={{ alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+          <FinancialText
+            style={{
+              fontWeight: 600,
+              color: displayAmount < 0 ? theme.pageText : theme.noticeTextLight,
+            }}
+          >
+            {format(
+              amountToInteger(displayAmount, format.currency.decimalPlaces),
+              'financial',
+            )}
+          </FinancialText>
+          {showSignToggle && !row.isAmountManual && (
+            <Button
+              variant="bare"
+              aria-label={t('Flip sign')}
+              onPress={() => onChange({ isSignFlipped: !row.isSignFlipped })}
+              style={{ padding: '2px 8px', ...styles.smallText }}
+            >
+              ±
+            </Button>
           )}
-        </FinancialText>
+        </View>
       )}
     </View>
   );
