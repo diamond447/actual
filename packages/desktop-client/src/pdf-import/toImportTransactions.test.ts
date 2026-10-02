@@ -37,6 +37,7 @@ describe('toImportTransactions', () => {
         amount: -48730,
         payee_name: 'Albert',
         imported_payee: 'Albert',
+        imported_id: 'pdf:2026-09-01:-48730:albert:0',
         notes: 'PLATBA KARTOU · Albert',
         cleared: true,
       },
@@ -54,5 +55,20 @@ describe('toImportTransactions', () => {
         transaction => transaction.amount,
       ),
     ).toEqual([48730, -1500000]);
+  });
+
+  it('gives identical rows different ids and keeps categories', () => {
+    const rows = toStatementRows([parsed[0], parsed[0]]).map((row, index) =>
+      index === 1 ? { ...row, category: 'groceries' } : row,
+    );
+    expect(
+      toImportTransactions(rows, 'account-1').map(transaction => [
+        transaction.imported_id,
+        transaction.category,
+      ]),
+    ).toEqual([
+      ['pdf:2026-09-01:-48730:albert:0', undefined],
+      ['pdf:2026-09-01:-48730:albert:1', 'groceries'],
+    ]);
   });
 });

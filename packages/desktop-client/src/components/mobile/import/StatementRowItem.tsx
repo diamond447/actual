@@ -23,12 +23,18 @@ type StatementRowItemProps = {
   row: StatementRow;
   flipSigns: boolean;
   onChange: (changes: Partial<StatementRow>) => void;
+  categoryName: string | null;
+  isCategorizing: boolean;
+  onPickCategory: () => void;
 };
 
 export function StatementRowItem({
   row,
   flipSigns,
   onChange,
+  categoryName,
+  isCategorizing,
+  onPickCategory,
 }: StatementRowItemProps) {
   const { t } = useTranslation();
   const format = useFormat();
@@ -91,6 +97,29 @@ export function StatementRowItem({
           {monthUtils.format(row.date, dateFormat)}
           {row.notes && row.notes !== row.payee ? ` · ${row.notes}` : ''}
         </Text>
+        <Button
+          variant="bare"
+          onPress={onPickCategory}
+          aria-label={t('Change category')}
+          style={{
+            alignSelf: 'flex-start',
+            marginTop: 4,
+            padding: '4px 10px',
+            borderRadius: 12,
+            backgroundColor: theme.pillBackground,
+            color: categoryName ? theme.pillText : theme.pageTextSubdued,
+            ...styles.smallText,
+          }}
+        >
+          {categoryName ??
+            (isCategorizing ? t('Finding category…') : t('Choose category'))}
+          {row.categorySource === 'guess' && (
+            <Text style={{ color: theme.pageTextSubdued }}>
+              {' · '}
+              <Trans>suggested</Trans>
+            </Text>
+          )}
+        </Button>
         {isRedacted && (
           <Text style={{ color: theme.warningText, ...styles.smallText }}>
             <Trans>Some details are blacked out.</Trans>
