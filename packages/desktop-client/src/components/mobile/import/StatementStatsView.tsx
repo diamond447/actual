@@ -29,7 +29,7 @@ export function StatementStatsView({
   const largestCategory = stats.expensesByCategory[0]?.amount ?? 0;
 
   return (
-    <View style={{ padding: 15, gap: 18 }}>
+    <View style={{ padding: 15, gap: 18, flexShrink: 0 }}>
       {stats.firstDate && stats.lastDate && (
         <Text style={{ color: theme.pageTextSubdued }}>
           <Trans count={stats.count}>

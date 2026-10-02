@@ -115,7 +115,7 @@ export function StatementRowItem({
             (isCategorizing ? t('Finding category…') : t('Choose category'))}
           {row.categorySource === 'guess' && (
             <Text style={{ color: theme.pageTextSubdued }}>
-              {' · '}
+              {'\u00a0· '}
               <Trans>suggested</Trans>
             </Text>
           )}
@@ -168,7 +168,7 @@ export function StatementRowItem({
         <FinancialText
           style={{
             fontWeight: 600,
-            color: displayAmount < 0 ? theme.errorText : theme.noticeTextLight,
+            color: displayAmount < 0 ? theme.pageText : theme.noticeTextLight,
           }}
         >
           {format(

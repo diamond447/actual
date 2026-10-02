@@ -249,16 +249,6 @@ export function ImportPdfPage() {
         throw new Error(result.errors[0].message);
       }
       await keepChosenCategories(result.added, transactions);
-      dispatch(
-        addNotification({
-          notification: {
-            type: 'message',
-            message: t('Imported {{count}} transactions', {
-              count: result.added.length,
-            }),
-          },
-        }),
-      );
       setStep({
         name: 'done',
         stats: statementStats(transactions),
@@ -336,7 +326,7 @@ export function ImportPdfPage() {
       />
 
       {step.name === 'choose' && (
-        <View style={{ padding: 20, gap: 16 }}>
+        <View style={{ padding: 20, gap: 16, flexShrink: 0 }}>
           {account && (
             <Text style={{ color: theme.pageTextSubdued }}>
               <Trans>Account: {{ accountName: account.name }}</Trans>
@@ -362,7 +352,7 @@ export function ImportPdfPage() {
       )}
 
       {step.name === 'password' && (
-        <View style={{ padding: 20, gap: 16 }}>
+        <View style={{ padding: 20, gap: 16, flexShrink: 0 }}>
           <Text>
             {step.isWrong ? (
               <Trans>The password is not correct. Try again.</Trans>
@@ -388,7 +378,9 @@ export function ImportPdfPage() {
       )}
 
       {step.name === 'reading' && (
-        <View style={{ padding: 20, alignItems: 'center', gap: 8 }}>
+        <View
+          style={{ padding: 20, alignItems: 'center', gap: 8, flexShrink: 0 }}
+        >
           <Text>
             {step.pageCount > 0 ? (
               <Trans>
@@ -406,7 +398,7 @@ export function ImportPdfPage() {
       )}
 
       {step.name === 'review' && (
-        <View>
+        <View style={{ flexShrink: 0 }}>
           <View style={{ padding: 15, gap: 10 }}>
             <Text>
               <Trans count={step.rows.length}>
@@ -450,7 +442,27 @@ export function ImportPdfPage() {
       )}
 
       {step.name === 'done' && (
-        <StatementStatsView stats={step.stats} categoryNames={categoryNames} />
+        <View style={{ flexShrink: 0 }}>
+          <View style={{ ...okStyle, margin: '15px 15px 0' }}>
+            <Text>
+              <Trans count={step.addedCount}>
+                Imported {{ count: step.addedCount }} transactions
+              </Trans>
+            </Text>
+            {step.stats.count > step.addedCount && (
+              <Text style={styles.smallText}>
+                <Trans count={step.stats.count - step.addedCount}>
+                  {{ count: step.stats.count - step.addedCount }} were already
+                  in the account and were not added again.
+                </Trans>
+              </Text>
+            )}
+          </View>
+          <StatementStatsView
+            stats={step.stats}
+            categoryNames={categoryNames}
+          />
+        </View>
       )}
     </Page>
   );
@@ -502,6 +514,14 @@ const footerStyle = {
   backgroundColor: theme.tableHeaderBackground,
   borderTopWidth: 1,
   borderColor: theme.tableBorder,
+};
+
+const okStyle = {
+  gap: 4,
+  padding: 12,
+  borderRadius: 6,
+  backgroundColor: theme.noticeBackground,
+  color: theme.noticeText,
 };
 
 const warningStyle = {
