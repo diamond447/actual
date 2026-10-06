@@ -34,9 +34,11 @@ export type ReviewReason =
   | 'uncertain-amount'
   | 'amount-from-balance'
   | 'balance-mismatch'
+  | 'unchecked-sign'
   | 'date-from-previous-row'
   | 'missing-description'
-  | 'redacted';
+  | 'redacted'
+  | 'blacked-out-rows';
 
 export type ParsedStatementTransaction = {
   /** YYYY-MM-DD */
@@ -46,6 +48,11 @@ export type ParsedStatementTransaction = {
   payee: string;
   notes: string;
   reviewReasons: ReviewReason[];
+  /**
+   * Set when this entry stands for table rows the user blacked out on
+   * purpose. Its amount (if known) is their total, from the balances.
+   */
+  blackedOutRows?: number;
 };
 
 /**

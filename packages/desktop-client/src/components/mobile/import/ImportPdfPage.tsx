@@ -375,9 +375,19 @@ export function ImportPdfPage() {
         ).length
       : 0;
 
+  const blackedOutRows =
+    step.name === 'review' ? step.rows.filter(row => row.blackedOutRows) : [];
+  const foundCount =
+    step.name === 'review' ? step.rows.length - blackedOutRows.length : 0;
+  const blackedOutRowCount = blackedOutRows.reduce(
+    (sum, row) => sum + (row.blackedOutRows ?? 0),
+    0,
+  );
+
   const missingAmountCount =
     step.name === 'review'
-      ? step.rows.filter(row => row.amount === null).length
+      ? step.rows.filter(row => row.amount === null && !row.blackedOutRows)
+          .length
       : 0;
 
   return (
@@ -511,10 +521,19 @@ export function ImportPdfPage() {
         <View style={{ flexShrink: 0 }}>
           <View style={{ padding: 15, gap: 10 }}>
             <Text>
-              <Trans count={step.rows.length}>
-                Found {{ count: step.rows.length }} transactions. Check them and
+              <Trans count={foundCount}>
+                Found {{ count: foundCount }} transactions. Check them and
                 uncheck the ones you do not want to import.
               </Trans>
+              {blackedOutRowCount > 0 && (
+                <>
+                  {' '}
+                  <Trans count={blackedOutRowCount}>
+                    {{ count: blackedOutRowCount }} blacked-out rows are
+                    skipped.
+                  </Trans>
+                </>
+              )}
             </Text>
             <StatementCheckPanel
               totalCheck={totalCheck}

@@ -84,7 +84,21 @@ export function StatementRowItem({
         .join(' · ')
     : '';
 
-  const notes: Array<{ key: string; text: string }> = [];
+  const notes: Array<{ key: string; text: string; isInfo?: boolean }> = [];
+  if (reasons.has('blacked-out-rows')) {
+    notes.push({
+      key: 'blacked-out',
+      isInfo: true,
+      text:
+        row.amount !== null
+          ? t(
+              'You blacked these rows out, so they are skipped. Their total comes from the balance on the statement. Tick the row to import it as one transaction.',
+            )
+          : t(
+              'You blacked these rows out, so they are skipped. Their total could not be calculated from the statement.',
+            ),
+    });
+  }
   if (reasons.has('redacted')) {
     notes.push({ key: 'redacted', text: t('Some details are blacked out.') });
   }
@@ -109,6 +123,14 @@ export function StatementRowItem({
       key: 'mismatch',
       text: t(
         'The amount does not match the change of the balance on the statement. Check it.',
+      ),
+    });
+  }
+  if (reasons.has('unchecked-sign')) {
+    notes.push({
+      key: 'sign',
+      text: t(
+        'Rows you blacked out sit right before this one, so its sign could not be checked. Check whether it is an expense or income.',
       ),
     });
   }
@@ -142,7 +164,9 @@ export function StatementRowItem({
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <label htmlFor={checkboxId}>
           <Text style={{ fontWeight: 600, ...styles.lineClamp(2) }}>
-            {row.payee || t('(no description)')}
+            {row.blackedOutRows
+              ? t('Blacked-out rows: {{count}}', { count: row.blackedOutRows })
+              : row.payee || t('(no description)')}
           </Text>
         </label>
         <Text style={{ color: theme.pageTextSubdued, ...styles.smallText }}>
@@ -175,7 +199,10 @@ export function StatementRowItem({
         {notes.map(note => (
           <Text
             key={note.key}
-            style={{ color: theme.warningText, ...styles.smallText }}
+            style={{
+              color: note.isInfo ? theme.pageTextSubdued : theme.warningText,
+              ...styles.smallText,
+            }}
           >
             {note.text}
           </Text>

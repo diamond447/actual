@@ -27,9 +27,11 @@ export function toStatementRows(
     ...transaction,
     id: String(index),
     parsedAmount: transaction.amount,
-    // Rows without a reliable amount are imported only after a check
+    // Rows without a reliable amount are imported only after a check, and
+    // rows the user blacked out are not imported unless they ask for it
     isSelected:
       transaction.amount !== null &&
+      !transaction.blackedOutRows &&
       !transaction.reviewReasons.includes('uncertain-amount'),
   }));
 }

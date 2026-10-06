@@ -646,3 +646,443 @@ describe('parseStatement', () => {
     ]);
   });
 });
+
+describe('parseStatement with rows blacked out on purpose', () => {
+  const header = line(
+    100,
+    [40, 'Datum'],
+    [100, 'Popis transakce'],
+    [400, 'Částka'],
+    [500, 'Zůstatek'],
+  );
+  /** A table row hidden completely: date, description, amount, balance. */
+  const blackedOutRow = (y: number): StatementRect[] => [
+    // dates sit a little right of the "Datum" header
+    { x: 47, y, width: 40, height: LINE_HEIGHT },
+    { x: 100, y, width: 120, height: LINE_HEIGHT },
+    { x: 400, y, width: 30, height: LINE_HEIGHT },
+    { x: 500, y, width: 40, height: LINE_HEIGHT },
+  ];
+  const row = (
+    y: number,
+    date: string,
+    text: string,
+    amount: string,
+    balance: string,
+  ) => line(y, [40, date], [100, text], [400, amount], [500, balance]);
+
+  it('lists hidden rows as one skipped entry with the total from the balances', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          // two rows blacked out at 140 and 160 moved -1 000,00 together
+          row(180, '05.03.2026', 'LIDL', '-100,00', '8 651,00'),
+        ],
+        [...blackedOutRow(140), ...blackedOutRow(160)],
+      ),
+    ]);
+
+    expect(
+      result.transactions.map(t => [
+        t.payee,
+        t.amount,
+        t.blackedOutRows,
+        t.reviewReasons,
+      ]),
+    ).toEqual([
+      ['ALBERT', -249, undefined, []],
+      ['', -1000, 2, ['blacked-out-rows']],
+      ['LIDL', -100, undefined, []],
+    ]);
+    expect(result.unrecognizedLines).toEqual([]);
+  });
+
+  it('keeps hidden rows apart when a visible row sits between them', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          row(150, '03.03.2026', 'BILLA', '-51,00', '9 600,00'),
+          row(180, '05.03.2026', 'LIDL', '-100,00', '9 000,00'),
+        ],
+        [...blackedOutRow(135), ...blackedOutRow(165)],
+      ),
+    ]);
+
+    expect(
+      result.transactions.map(t => [t.amount, t.blackedOutRows ?? null]),
+    ).toEqual([
+      [-249, null],
+      // 9 751 → 9 600 minus BILLA's -51,00 leaves -100,00 for the hidden row
+      [-100, 1],
+      [-51, null],
+      [-500, 1],
+      [-100, null],
+    ]);
+  });
+
+  it('leaves the total unknown when no balance comes before the hidden rows', () => {
+    const result = parseStatement([
+      page(
+        [header, row(140, '02.03.2026', 'ALBERT', '-249,00', '9 751,00')],
+        blackedOutRow(120),
+      ),
+    ]);
+
+    expect(result.transactions[0]).toMatchObject({
+      date: '2026-03-02',
+      amount: null,
+      blackedOutRows: 1,
+      reviewReasons: ['blacked-out-rows'],
+    });
+  });
+
+  it('does not treat blacked-out details of a visible row as a hidden row', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          line(129, [40, 'x']),
+        ],
+        // only the second line of the description is blacked out
+        [{ x: 100, y: 129, width: 120, height: LINE_HEIGHT }],
+      ),
+    ]);
+
+    expect(result.transactions.some(t => t.blackedOutRows)).toBe(false);
+  });
+});
+
+describe('parseStatement column matching', () => {
+  it('reads right-aligned numbers under left-aligned headers', () => {
+    const cells = (y: number, ...rest: Array<[number, string, number]>) =>
+      rest.map(([x, text, width]) => ({ text, x, y, width, height: 8 }));
+    // Like mBank: "Částka" starts at 414 and amounts end at 475, balances
+    // end at 552 under "Zůstatek" at 481
+    const result = parseStatement([
+      page([
+        cells(
+          100,
+          [44, 'Datum', 20],
+          [162, 'Popis', 20],
+          [414, 'Částka', 24],
+          [481, 'Zůstatek', 32],
+        ),
+        cells(
+          120,
+          [51, '10.03.2026', 40],
+          [162, 'VÝPLATA', 30],
+          [436, '42 350,00', 39],
+          [513, '59 785,50', 39],
+        ),
+        cells(
+          140,
+          [51, '15.03.2026', 40],
+          [162, 'NÁJEM', 30],
+          [432, '-15 000,00', 43],
+          [513, '44 785,50', 39],
+        ),
+        cells(
+          160,
+          [51, '16.03.2026', 40],
+          [162, 'ALBERT', 30],
+          [453, '-9,90', 22],
+          [513, '44 775,60', 39],
+        ),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([
+      42350, -15000, -9.9,
+    ]);
+    expect(result.unrecognizedLines).toEqual([]);
+  });
+});
+
+describe('parseStatement edge cases around blacked-out areas', () => {
+  const header = line(
+    100,
+    [40, 'Datum'],
+    [100, 'Popis transakce'],
+    [400, 'Částka'],
+    [500, 'Zůstatek'],
+  );
+  const row = (
+    y: number,
+    date: string,
+    text: string,
+    amount: string,
+    balance: string,
+  ) => line(y, [40, date], [100, text], [400, amount], [500, balance]);
+  const box = (x: number, y: number, width: number) => ({
+    x,
+    y,
+    width,
+    height: LINE_HEIGHT,
+  });
+
+  it('ignores blacked-out text above a repeated header and below the table', () => {
+    const result = parseStatement([
+      page([header, row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00')]),
+      page(
+        [
+          header,
+          row(120, '05.03.2026', 'LIDL', '-100,00', '9 651,00'),
+          line(140, [40, 'Konečný zůstatek'], [500, '9 651,00']),
+        ],
+        // account holder above the header, signature box below the table
+        [box(40, 50, 520), box(40, 400, 520)],
+      ),
+    ]);
+
+    expect(result.transactions.some(t => t.blackedOutRows)).toBe(false);
+  });
+
+  it('does not mistake a blacked-out detail line for a hidden row', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          row(140, '03.03.2026', 'LIDL', '-10,00', '9 651,00'),
+        ],
+        // the counterparty account line under ALBERT
+        [box(40, 129, 160)],
+      ),
+    ]);
+
+    expect(result.transactions.some(t => t.blackedOutRows)).toBe(false);
+    // so the misread amount is still caught by the balance
+    expect(result.transactions[1].reviewReasons).toContain('balance-mismatch');
+  });
+
+  it('ignores a blacked-out footer far below the last row of a page', () => {
+    const result = parseStatement([
+      page(
+        [header, row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00')],
+        [box(40, 800, 520)],
+      ),
+      page([header, row(120, '05.03.2026', 'LIDL', '-10,00', '9 651,00')]),
+    ]);
+
+    expect(result.transactions.some(t => t.blackedOutRows)).toBe(false);
+    expect(result.transactions[1].reviewReasons).toContain('balance-mismatch');
+  });
+
+  it('treats a full-width box over one detail line as part of the row above', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          row(140, '03.03.2026', 'LIDL', '-10,00', '9 651,00'),
+        ],
+        [box(40, 129, 520)],
+      ),
+    ]);
+
+    expect(result.transactions.some(t => t.blackedOutRows)).toBe(false);
+    expect(result.transactions[1].reviewReasons).toContain('balance-mismatch');
+  });
+
+  it('leaves one box over a whole row to the balance check', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          row(160, '05.03.2026', 'LIDL', '-100,00', '8 651,00'),
+        ],
+        // date line and two description lines under one box
+        [{ x: 40, y: 135, width: 520, height: 20 }],
+      ),
+    ]);
+
+    expect(result.transactions.some(t => t.blackedOutRows)).toBe(false);
+    expect(result.transactions[1].reviewReasons).toContain('balance-mismatch');
+  });
+
+  it('does not let a far tall box absorb a misread amount', () => {
+    const result = parseStatement([
+      page(
+        [header, row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00')],
+        [
+          box(40, 360, 40),
+          box(400, 360, 30),
+          { x: 40, y: 360, width: 520, height: 60 },
+        ],
+      ),
+      page([header, row(120, '05.03.2026', 'LIDL', '-180,00', '9 651,00')]),
+    ]);
+
+    expect(result.transactions.some(t => t.blackedOutRows)).toBe(false);
+    expect(result.transactions[1].reviewReasons).toContain('balance-mismatch');
+  });
+
+  it('keeps numbers in descriptions out of the amount column', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          line(129, [100, 'Kurz'], [300, '25,10']),
+          row(160, '05.03.2026', 'LIDL', '-100,00', '8 651,00'),
+        ],
+        [box(40, 140, 40), box(400, 140, 30), box(500, 140, 40)],
+      ),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([-249, -1000, -100]);
+  });
+
+  it('keeps finding hidden rows below a summary box above the table', () => {
+    const result = parseStatement([
+      page(
+        [
+          line(40, [40, 'Počáteční zůstatek'], [500, '10 000,00']),
+          line(50, [40, 'Konečný zůstatek'], [500, '8 651,00']),
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          row(160, '05.03.2026', 'LIDL', '-100,00', '8 651,00'),
+        ],
+        [box(40, 140, 40), box(400, 140, 30), box(500, 140, 40)],
+      ),
+    ]);
+
+    expect(result.transactions[1]).toMatchObject({
+      amount: -1000,
+      blackedOutRows: 1,
+    });
+  });
+
+  it('counts hidden rows with a stray character peeking out of a box', () => {
+    const result = parseStatement([
+      page(
+        [
+          header,
+          row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00'),
+          // the last digit of the balance shows next to its box
+          line(140, [541, '9']),
+          row(160, '05.03.2026', 'LIDL', '-100,00', '8 651,00'),
+        ],
+        [box(40, 140, 40), box(400, 140, 30), box(500, 140, 40)],
+      ),
+    ]);
+
+    expect(result.transactions[1]).toMatchObject({
+      amount: -1000,
+      blackedOutRows: 1,
+    });
+  });
+
+  it('keeps counting hidden rows that continue from the previous page', () => {
+    const hiddenRow = (y: number) => [
+      box(40, y, 40),
+      box(100, y, 120),
+      box(400, y, 30),
+      box(500, y, 40),
+      // two description lines under the row
+      box(100, y + 10, 100),
+      box(100, y + 20, 100),
+    ];
+    const result = parseStatement([
+      page(
+        [header, row(120, '02.03.2026', 'ALBERT', '-249,00', '9 751,00')],
+        hiddenRow(140),
+      ),
+      page(
+        [header, row(220, '05.03.2026', 'LIDL', '-100,00', '8 651,00')],
+        [...hiddenRow(120), ...hiddenRow(170)],
+      ),
+    ]);
+
+    expect(result.transactions[1]).toMatchObject({
+      amount: -1000,
+      blackedOutRows: 3,
+    });
+  });
+
+  it('never moves a number from an exchange rate column into the amount', () => {
+    const cells = (y: number, ...rest: Array<[number, string, number]>) =>
+      rest.map(([x, text, width]) => ({ text, x, y, width, height: 8 }));
+    const result = parseStatement([
+      page([
+        cells(
+          100,
+          [40, 'Datum', 20],
+          [100, 'Popis', 20],
+          [400, 'Částka CZK', 40],
+          [456, 'Kurz', 16],
+          [510, 'Zůstatek', 30],
+        ),
+        cells(
+          120,
+          [40, '02.03.2026', 40],
+          [100, 'ALBERT', 30],
+          [410, '-249,00', 30],
+          [500, '9 751,00', 40],
+        ),
+        cells(129, [100, 'Platba v EUR', 40], [452, '25,10', 20]),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([-249]);
+    expect(result.unrecognizedLines).toHaveLength(1);
+  });
+
+  it('flags the row after hidden rows when signs cannot be checked', () => {
+    const unsigned = (y: number, date: string, amount: string, bal: string) =>
+      line(y, [40, date], [100, 'X'], [400, amount], [500, bal]);
+    const result = parseStatement([
+      page(
+        [
+          header,
+          unsigned(120, '02.03.2026', '249,00', '9 751,00'),
+          unsigned(160, '05.03.2026', '100,00', '8 651,00'),
+          unsigned(180, '06.03.2026', '51,00', '8 600,00'),
+        ],
+        [box(40, 140, 40), box(400, 140, 30), box(500, 140, 40)],
+      ),
+    ]);
+
+    expect(result.transactions[2].reviewReasons).toContain('unchecked-sign');
+    expect(result.hasUncertainSigns).toBe(true);
+  });
+
+  it('reads wide right-aligned numbers under short headers', () => {
+    const cells = (y: number, ...rest: Array<[number, string, number]>) =>
+      rest.map(([x, text, width]) => ({ text, x, y, width, height: 8 }));
+    const result = parseStatement([
+      page([
+        cells(
+          100,
+          [40, 'Datum', 30],
+          [100, 'Popis', 30],
+          [380, 'Výdej', 30],
+          [440, 'Příjem', 30],
+          [510, 'Zůstatek', 30],
+        ),
+        cells(
+          120,
+          [40, '02.03.2026', 40],
+          [100, 'VÝPLATA', 30],
+          [400, '112 345,00 CZK', 70],
+          [480, '113 345,00', 60],
+        ),
+        cells(
+          140,
+          [40, '03.03.2026', 40],
+          [100, 'NÁJEM', 30],
+          [365, '15 000,00', 45],
+          [480, '98 345,00', 60],
+        ),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([112345, -15000]);
+  });
+});

@@ -34,6 +34,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
   let lastDate: string | null = null;
   let hasSignedAmounts = false;
   let usesDebitCreditColumns = false;
+  let isAfterBlackedOutRow = false;
 
   for (const [pageIndex, page] of pages.entries()) {
     const pageNumber = pageIndex + 1;
@@ -48,11 +49,111 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
     const lines = groupLines(page.items);
     const consumed = new Set<Cell>();
     let current: PendingTransaction | null = null;
+    // The transaction table on this page: from its header (or, on pages
+    // without a repeated header, its first dated row) to the closing balance
+    let tableTop: number | null = null;
+    let isTableEnded = false;
+    // Bottom of the last thing that belongs to the table on this page
+    let tableBottom: number | null = null;
+    const pageStart = pending.length;
+    const redactedRows = groupRedactionRows(page.redactions);
+    const lineHeight = medianLineHeight(lines);
+    let redactedRowIndex = 0;
 
     const start = (transaction: PendingTransaction) => {
       pending.push(transaction);
       lastDate = transaction.date;
+      isAfterBlackedOutRow = false;
       return transaction;
+    };
+
+    // A table row blacked out as a whole (date, text and amount) has no
+    // text left. The user hid it on purpose: it is not imported, but it is
+    // listed so the money it moved is still visible in the review.
+    const addBlackedOutRowsAbove = (y: number) => {
+      while (
+        redactedRowIndex < redactedRows.length &&
+        redactedRows[redactedRowIndex].y < y
+      ) {
+        const row = redactedRows[redactedRowIndex++];
+        const lastBottom = Math.max(
+          tableBottom ?? -Infinity,
+          pending.length > pageStart
+            ? pending[pending.length - 1].bottom
+            : -Infinity,
+        );
+        // Table rows follow each other closely; a box far below the last
+        // row (a footer, a signature) is not part of the table
+        const isNextToTable =
+          tableTop !== null &&
+          !isTableEnded &&
+          row.y > tableTop &&
+          row.y - lastBottom <= lineHeight * 4;
+        if (!isNextToTable) {
+          continue;
+        }
+        const tableColumns = columns;
+        const dateColumn = tableColumns?.find(column => column.kind === 'date');
+        // A whole row has its date and its amount blacked out in separate
+        // boxes; a blacked-out detail line of a visible row only covers the
+        // description. A single box across the whole width is ambiguous (it
+        // may hide detail lines just as well), and taking it for a hidden row
+        // would let it absorb any balance difference, so it is left alone and
+        // the balance check flags the next row instead
+        const dateRects = row.rects.filter(
+          rect =>
+            !!dateColumn &&
+            !!tableColumns &&
+            overlapsColumnArea(rect, dateColumn, tableColumns),
+        );
+        const moneyRects = row.rects.filter(rect =>
+          (tableColumns ?? []).some(
+            column =>
+              [...moneyKinds, 'balance'].includes(column.kind) &&
+              overlapsColumnArea(rect, column, tableColumns ?? []),
+          ),
+        );
+        const isTableRow =
+          dateRects.length > 0 &&
+          moneyRects.length > 0 &&
+          dateRects.some(rect => !moneyRects.includes(rect)) &&
+          moneyRects.some(rect => !dateRects.includes(rect)) &&
+          // A stray character peeking out of a box does not make it a
+          // visible row
+          !lines.some(
+            line =>
+              overlapsRect(line, row) &&
+              line.cells
+                .map(cell => cell.text)
+                .join('')
+                .trim().length > 2,
+          );
+        if (!isTableRow) {
+          // e.g. the second line of a blacked-out row's description
+          tableBottom = Math.max(lastBottom, row.y + row.height);
+          continue;
+        }
+        const previous = pending[pending.length - 1];
+        if (isAfterBlackedOutRow && previous?.blackedOutRows) {
+          previous.blackedOutRows++;
+          previous.bottom = row.y + row.height;
+        } else {
+          pending.push({
+            date: lastDate ?? '',
+            amount: null,
+            balance: null,
+            hasMoneyCell: true,
+            isAmountUncertain: false,
+            isRedacted: true,
+            blackedOutRows: 1,
+            descriptionLines: [],
+            bottom: row.y + row.height,
+          });
+        }
+        isAfterBlackedOutRow = true;
+        tableBottom = row.y + row.height;
+        current = null;
+      }
     };
 
     const takeAmount = (amount: ClassifiedAmount) => {
@@ -75,6 +176,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
     };
 
     for (const line of lines) {
+      addBlackedOutRowsAbove(line.y);
       const amounts = classifyAmounts(findAmounts(line), columns);
       const date = findLeadingDate(line, dateX);
 
@@ -84,6 +186,9 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
           current = null;
           columns = header;
           dateX = header.find(column => column.kind === 'date')?.left ?? dateX;
+          tableTop = line.y + line.height;
+          tableBottom = tableTop;
+          isTableEnded = false;
           continue;
         }
       }
@@ -95,6 +200,10 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         parseSummary(line, date ? 'balance-only' : 'any');
       if (summary) {
         current = null;
+        // A closing balance in a summary above the table ends nothing
+        if (summary.closing && tableTop !== null) {
+          isTableEnded = true;
+        }
         const values = amounts.filter(amount => amount.value !== 0);
         if (summary.opening && values.length > 0) {
           openingBalance ??= values[0].value;
@@ -108,6 +217,11 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
 
       if (date) {
         current = null;
+        if (tableTop === null && columns) {
+          // A continuation page without a repeated header
+          tableTop = line.y - 1;
+          tableBottom = tableTop;
+        }
         const hasMoneyCell = columns
           ? amounts.length > 0 || hasTextInMoneyColumn(line, columns, date)
           : amounts.length > 0;
@@ -225,6 +339,8 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
       }
     }
 
+    addBlackedOutRowsAbove(Infinity);
+
     // Report every line with an amount that ended up nowhere
     for (const line of lines) {
       const isUnaccounted = findAmounts(line).some(
@@ -237,6 +353,13 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
           reason: 'unmatched-line',
         });
       }
+    }
+  }
+
+  // Blacked-out rows before the first dated row take the next row's date
+  for (let i = pending.length - 1; i >= 0; i--) {
+    if (pending[i].date === '' && i + 1 < pending.length) {
+      pending[i].date = pending[i + 1].date;
     }
   }
 
@@ -268,7 +391,16 @@ type Line = {
   cells: Cell[];
 };
 
-type ColumnKind = 'amount' | 'debit' | 'credit' | 'balance' | 'date' | 'other';
+type ColumnKind =
+  | 'amount'
+  | 'debit'
+  | 'credit'
+  | 'balance'
+  | 'date'
+  /** Foreign amounts, exchange rates, currency: numbers, never the amount */
+  | 'foreign'
+  /** Description and other text columns */
+  | 'other';
 
 type Column = { kind: ColumnKind; left: number; center: number };
 
@@ -304,8 +436,12 @@ type PendingTransaction = {
   isRedacted: boolean;
   isAmountFromBalance?: boolean;
   isBalanceMismatch?: boolean;
+  /** Unsigned statement where nothing could confirm this row's sign */
+  isSignUnchecked?: boolean;
   /** Undated row that took the date of the row above */
   isDateFromPreviousRow?: boolean;
+  /** Stands for this many table rows the user blacked out completely */
+  blackedOutRows?: number;
   descriptionLines: string[];
   bottom: number;
 };
@@ -370,7 +506,7 @@ function normalize(text: string) {
 const headerKinds: Array<{ kind: ColumnKind; pattern: RegExp }> = [
   // Amounts in another currency or exchange rates are never the amount
   {
-    kind: 'other',
+    kind: 'foreign',
     pattern: /puvodni|original|\bmen[ay]\b|currency|kurz|\brate\b/,
   },
   { kind: 'balance', pattern: /zustatek|balance|saldo|\bstav\b/ },
@@ -577,15 +713,54 @@ function findAmounts(line: Line): FoundAmount[] {
   return amounts;
 }
 
+/**
+ * The column a cell belongs to. Statements right-align numbers, while
+ * headers may sit left, right or centered above them, so the cell's right
+ * edge falls inside its column's area (from its header to the next
+ * header). A little slack covers numbers that end just past the next
+ * header's left edge.
+ */
 function nearestColumn(cell: Cell, columns: Column[]): Column {
-  const center = cell.x + cell.width / 2;
-  let nearest = columns[0];
-  for (const column of columns) {
-    if (Math.abs(center - column.center) < Math.abs(center - nearest.center)) {
-      nearest = column;
+  const sorted = [...columns].sort((a, b) => a.left - b.left);
+  const right = cell.x + cell.width - Math.min(6, cell.width / 4);
+  let match = sorted[0];
+  for (const column of sorted) {
+    if (column.left <= right) {
+      match = column;
     }
   }
-  return nearest;
+  if (match.kind !== 'other') {
+    return match;
+  }
+  // A number that seems to sit in a text column (e.g. centered under a
+  // right-aligned money header) belongs to the nearest money header right
+  // above it. Numbers further away, such as "Kurz 25,10" in a description,
+  // stay where they are; exchange rate or foreign amount columns are never
+  // overridden
+  const center = cell.x + cell.width / 2;
+  const nearby = sorted
+    .filter(
+      column =>
+        [...moneyKinds, 'balance'].includes(column.kind) &&
+        Math.abs(center - column.center) <=
+          (column.center - column.left + cell.width / 2) * 1.5,
+    )
+    .sort(
+      (a, b) => Math.abs(center - a.center) - Math.abs(center - b.center),
+    )[0];
+  return nearby ?? match;
+}
+
+/** Whether a blacked-out area reaches into a column's area. */
+function overlapsColumnArea(
+  rect: StatementRect,
+  column: Column,
+  columns: Column[],
+) {
+  const next = columns
+    .filter(other => other.left > column.left)
+    .reduce((min, other) => Math.min(min, other.left), Infinity);
+  return rect.x < next && rect.x + rect.width > column.left;
 }
 
 /**
@@ -669,6 +844,34 @@ function overlapsRedaction(line: Line, redactions: StatementRect[]) {
   );
 }
 
+function medianLineHeight(lines: Line[]) {
+  const heights = lines.map(line => line.height).sort((a, b) => a - b);
+  return heights.length > 0 ? heights[Math.floor(heights.length / 2)] : 8;
+}
+
+type RedactionRow = { y: number; height: number; rects: StatementRect[] };
+
+/** Group blacked-out areas that sit on the same text line, top to bottom. */
+function groupRedactionRows(redactions: StatementRect[]): RedactionRow[] {
+  const rows: RedactionRow[] = [];
+  for (const rect of [...redactions].sort((a, b) => a.y - b.y)) {
+    const row = rows.find(
+      candidate => Math.abs(candidate.y - rect.y) < rect.height / 2,
+    );
+    if (row) {
+      row.rects.push(rect);
+      row.height = Math.max(row.height, rect.y + rect.height - row.y);
+    } else {
+      rows.push({ y: rect.y, height: rect.height, rects: [rect] });
+    }
+  }
+  return rows;
+}
+
+function overlapsRect(line: Line, rect: { y: number; height: number }) {
+  return rect.y < line.y + line.height && rect.y + rect.height > line.y;
+}
+
 const round = (value: number) => Math.round(value * 100) / 100;
 
 /**
@@ -719,7 +922,39 @@ function applyRunningBalances(
 
   let previousBalance = ordered === transactions ? openingBalance : null;
   let unresolvedSigns = 0;
+  // Blacked-out rows since the last known balance; whatever they moved is
+  // the part of the next balance change the next row does not explain
+  let blackedOut: PendingTransaction | null = null;
   for (const row of ordered) {
+    if (row.blackedOutRows) {
+      blackedOut = previousBalance === null ? null : row;
+      continue;
+    }
+    if (blackedOut) {
+      const gap = blackedOut;
+      blackedOut = null;
+      if (
+        row.balance !== null &&
+        previousBalance !== null &&
+        row.amount !== null &&
+        !fixSigns
+      ) {
+        gap.amount = round(row.balance - previousBalance - row.amount);
+        gap.isAmountFromBalance = true;
+      } else if (fixSigns) {
+        // Without signs on the statement, the gap hides whether this row
+        // is an expense or income
+        row.isSignUnchecked = true;
+        unresolvedSigns++;
+      }
+      // The gap explains any difference, so this row is not checked
+      previousBalance =
+        row.balance ??
+        (gap.amount !== null && previousBalance !== null && row.amount !== null
+          ? round(previousBalance + gap.amount + row.amount)
+          : null);
+      continue;
+    }
     if (row.balance !== null && previousBalance !== null) {
       const change = round(row.balance - previousBalance);
       if (row.amount === null) {
@@ -763,6 +998,17 @@ function toTransaction(
     lines[0] ??
     '';
 
+  if (pending.blackedOutRows) {
+    return {
+      date: pending.date,
+      amount: pending.amount,
+      payee: '',
+      notes: '',
+      reviewReasons: ['blacked-out-rows'],
+      blackedOutRows: pending.blackedOutRows,
+    };
+  }
+
   const reviewReasons: ReviewReason[] = [];
   if (pending.amount === null) {
     reviewReasons.push('missing-amount');
@@ -773,6 +1019,9 @@ function toTransaction(
   }
   if (pending.isBalanceMismatch) {
     reviewReasons.push('balance-mismatch');
+  }
+  if (pending.isSignUnchecked) {
+    reviewReasons.push('unchecked-sign');
   }
   if (pending.isDateFromPreviousRow) {
     reviewReasons.push('date-from-previous-row');
