@@ -14,6 +14,7 @@ import {
   formatDayHeader,
   getCategoryDisplay,
   getPayeeDisplay,
+  getRowTexts,
   groupTransactionsByDay,
   matchesFilterType,
   matchesSearch,
@@ -391,5 +392,24 @@ describe('transactionsFeedHelper', () => {
       t => t.id !== 'a',
     );
     expect(totals).toEqual({ spent: 500, received: 0 });
+  });
+
+  it('titles rows without a payee by their note or category', () => {
+    expect(getRowTexts('Albert', 'Food', 'milk', '(No payee)')).toEqual({
+      title: 'Albert',
+      subtitle: 'Food · milk',
+    });
+    expect(getRowTexts(null, 'Food', ' lunch ', '(No payee)')).toEqual({
+      title: 'lunch',
+      subtitle: 'Food',
+    });
+    expect(getRowTexts(null, 'Food', undefined, '(No payee)')).toEqual({
+      title: 'Food',
+      subtitle: '',
+    });
+    expect(getRowTexts(null, '', '', '(No payee)')).toEqual({
+      title: '(No payee)',
+      subtitle: '',
+    });
   });
 });

@@ -46,10 +46,10 @@ import { useUrlParam } from '#hooks/useUrlParam';
 import {
   calculateMonthTotals,
   filterTransactions,
-  formatCategoryAndNotes,
   formatDayHeader,
   getCategoryDisplay,
   getPayeeDisplay,
+  getRowTexts,
   groupTransactionsByDay,
 } from './transactionsFeedHelper';
 import type { DayGroup, TransactionFilterType } from './transactionsFeedHelper';
@@ -541,9 +541,12 @@ function TransactionFeedRow({
     t,
   );
 
-  const subtitle = formatCategoryAndNotes(
+  const noPayeeLabel = t('(No payee)');
+  const { title, subtitle } = getRowTexts(
+    payeeName === noPayeeLabel ? null : payeeName,
     categoryDisplay.name,
-    transaction.notes,
+    transaction.notes ?? undefined,
+    noPayeeLabel,
   );
 
   const formattedAmount = format(transaction.amount, 'financial');
@@ -554,7 +557,7 @@ function TransactionFeedRow({
       variant="bare"
       onPress={onSelect}
       aria-label={t('Transaction: {{payee}}, {{amount}}', {
-        payee: payeeName,
+        payee: title,
         amount: formattedAmount,
       })}
       style={{
@@ -600,7 +603,7 @@ function TransactionFeedRow({
             whiteSpace: 'nowrap',
           }}
         >
-          {payeeName}
+          {title}
         </Text>
         {subtitle && (
           <Text

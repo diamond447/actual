@@ -137,6 +137,33 @@ export function formatCategoryAndNotes(
 }
 
 /**
+ * Title and subtitle of a row. Transactions without a payee (e.g. logged
+ * with quick add) are titled by their note, or else their category, rather
+ * than "(No payee)".
+ */
+export function getRowTexts(
+  payeeName: string | null,
+  categoryName: string,
+  notes: string | undefined,
+  noPayeeLabel: string,
+): { title: string; subtitle: string } {
+  if (payeeName) {
+    return {
+      title: payeeName,
+      subtitle: formatCategoryAndNotes(categoryName, notes),
+    };
+  }
+  const cleanNotes = notes?.trim();
+  if (cleanNotes) {
+    return { title: cleanNotes, subtitle: categoryName.trim() };
+  }
+  if (categoryName.trim()) {
+    return { title: categoryName.trim(), subtitle: '' };
+  }
+  return { title: noPayeeLabel, subtitle: '' };
+}
+
+/**
  * Checks whether a transaction matches the given normalized search term.
  */
 export function matchesSearch(
