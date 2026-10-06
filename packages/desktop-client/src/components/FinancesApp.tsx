@@ -250,7 +250,10 @@ export function FinancesApp() {
                   />
                   <Notifications />
                   <BankSyncStatus />
-                  {isNarrowWidth && <MobilePageHeaderSlot />}
+                  {isNarrowWidth &&
+                    location.pathname !== '/transactions/quick' && (
+                      <MobilePageHeaderSlot />
+                    )}
 
                   <Routes>
                     <Route
