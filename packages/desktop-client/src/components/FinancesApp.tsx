@@ -30,6 +30,7 @@ import { EnableBankingCallback } from './EnableBankingCallback';
 import { FeatureErrorFallback } from './FeatureErrorFallback';
 import { GlobalKeys } from './GlobalKeys';
 import { MobileBankSyncAccountEditPage } from './mobile/banksync/MobileBankSyncAccountEditPage';
+import { ForkMobileScreen } from './mobile/ForkMobileScreen';
 import { MobileNavTabs } from './mobile/MobileNavTabs';
 import { TransactionEdit } from './mobile/transactions/TransactionEdit';
 import { NotificationsPage } from './news/NotificationsPage';
@@ -254,7 +255,39 @@ export function FinancesApp() {
                   <Routes>
                     <Route
                       path="/"
-                      element={<Navigate to="/budget" replace />}
+                      element={
+                        <Navigate
+                          to={isNarrowWidth ? '/overview' : '/budget'}
+                          replace
+                        />
+                      }
+                    />
+                    <Route
+                      path="/overview"
+                      element={
+                        <ForkMobileScreen
+                          name="OverviewPage"
+                          wideFallback="/budget"
+                        />
+                      }
+                    />
+                    <Route
+                      path="/transactions"
+                      element={
+                        <ForkMobileScreen
+                          name="TransactionsFeedPage"
+                          wideFallback="/accounts"
+                        />
+                      }
+                    />
+                    <Route
+                      path="/transactions/quick"
+                      element={
+                        <ForkMobileScreen
+                          name="QuickAddPage"
+                          wideFallback="/accounts"
+                        />
+                      }
                     />
 
                     <Route path="/reports/*" element={<Reports />} />
@@ -468,6 +501,8 @@ export function FinancesApp() {
                 </View>
 
                 <Routes>
+                  <Route path="/overview" element={<MobileNavTabs />} />
+                  <Route path="/transactions" element={<MobileNavTabs />} />
                   <Route path="/budget" element={<MobileNavTabs />} />
                   <Route path="/accounts" element={<MobileNavTabs />} />
                   <Route path="/settings" element={<MobileNavTabs />} />

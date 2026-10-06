@@ -14,6 +14,7 @@ import { useResponsive } from '@actual-app/components/hooks/useResponsive';
 import {
   SvgCog,
   SvgCreditCard,
+  SvgPiggyBank,
   SvgReports,
   SvgStoreFront,
   SvgTuning,
@@ -27,8 +28,6 @@ import { useIsTestEnv } from '#hooks/useIsTestEnv';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
 
 const TAB_BAR_HEIGHT = 64;
-// `ALL_ACCOUNTS_ID` in AccountsPage; not imported to avoid an import cycle.
-const ALL_TRANSACTIONS_PATH = '/accounts/all';
 // Room for the iPhone home indicator when the app runs as a home-screen PWA.
 const MAX_SAFE_AREA_BOTTOM = 34;
 
@@ -55,6 +54,7 @@ export function MobileTabBar() {
     {
       title: null,
       items: [
+        { name: t('Accounts'), path: '/accounts', Icon: SvgPiggyBank },
         { name: t('Reports'), path: '/reports', Icon: SvgReports },
         { name: t('Settings'), path: '/settings', Icon: SvgCog },
       ],
@@ -93,25 +93,21 @@ export function MobileTabBar() {
         borderTop: `1px solid ${theme.tableBorder}`,
       }}
     >
-      <TabLink to="/budget" label={t('Budget')} icon={<BudgetIcon />} />
+      <TabLink to="/overview" label={t('Overview')} icon={<OverviewIcon />} />
       <TabLink
-        to={ALL_TRANSACTIONS_PATH}
+        to="/transactions"
+        end
         label={t('Transactions')}
         icon={<TransactionsIcon />}
       />
       <NavLink
-        to="/transactions/new"
+        to="/transactions/quick"
         aria-label={t('Add transaction')}
         className={addButtonClass}
       >
         <PlusIcon />
       </NavLink>
-      <TabLink
-        to="/accounts"
-        end
-        label={t('Accounts')}
-        icon={<AccountsIcon />}
-      />
+      <TabLink to="/budget" label={t('Budget')} icon={<BudgetIcon />} />
       <DialogTrigger>
         <RACButton
           className={tabClass}
@@ -334,10 +330,8 @@ function TransactionsIcon() {
   );
 }
 
-function AccountsIcon() {
-  return (
-    <TabIcon d="M4 7h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4z M4 7V6a2 2 0 0 1 2-2h10 M16 13h.01" />
-  );
+function OverviewIcon() {
+  return <TabIcon d="M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z" />;
 }
 
 function MoreIcon() {
