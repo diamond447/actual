@@ -79,13 +79,14 @@ function ExpenseCategoryName({
             flexShrink: 0,
           }}
         >
-          <CategoryBadge category={category} size={28} />
+          <CategoryBadge category={category} size={24} />
         </Button>
       </CategoryAppearancePicker>
       <Button
         variant="bare"
         style={{
-          maxWidth: `calc(${sidebarColumnWidth} - 34px)`,
+          maxWidth: `calc(${sidebarColumnWidth} - 30px)`,
+          minWidth: 0,
         }}
         onPress={() => onEditCategory?.(category.id)}
       >
@@ -99,7 +100,14 @@ function ExpenseCategoryName({
           <Text
             style={{
               ...styles.lineClamp(2),
-              width: `calc(${sidebarColumnWidth} - 34px)`,
+              // Wrap between words and hyphenate a word too long for the
+              // narrow column instead of cutting it at any letter
+              wordBreak: 'normal',
+              overflowWrap: 'break-word',
+              hyphens: 'auto',
+              WebkitHyphens: 'auto',
+              flexShrink: 1,
+              minWidth: 0,
               textAlign: 'left',
               ...styles.smallText,
             }}
