@@ -215,7 +215,7 @@ async function loadGlobalPrefs(): Promise<GlobalPrefs> {
         ? false
         : notifyWhenUpdateIsAvailable,
     lastSeenNewsDate: lastSeenNewsDate || undefined,
-    showNewsFeed: showNewsFeed === undefined ? false : showNewsFeed
+    showNewsFeed: showNewsFeed === undefined ? false : showNewsFeed,
   };
 }
 
