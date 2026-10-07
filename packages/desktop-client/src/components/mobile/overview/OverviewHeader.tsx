@@ -25,7 +25,8 @@ export function OverviewHeader({
   const { t } = useTranslation();
   const locale = useLocale();
 
-  const rawMonthName = monthUtils.format(month, 'MMMM yyyy', locale);
+  // Standalone month name (LLLL): "Říjen 2026", not the genitive "října"
+  const rawMonthName = monthUtils.format(month, 'LLLL yyyy', locale);
   const displayMonth =
     rawMonthName.charAt(0).toUpperCase() + rawMonthName.slice(1);
 
