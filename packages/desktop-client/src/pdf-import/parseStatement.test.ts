@@ -1158,6 +1158,73 @@ describe('parseStatement bank layouts', () => {
     expect(result.closingBalance).toBe(1950);
   });
 
+  const stackedHeader = [
+    line(100, [40, 'Datum'], [100, 'Popis'], [520, 'Částka']),
+    line(112, [40, 'Valuta'], [100, 'Zpráva'], [480, 'Původní částka']),
+    line(124, [40, 'Kód transakce'], [100, 'Poznámka'], [530, 'Kurz']),
+  ];
+
+  it('starts a new row at a date where the stacked header has none', () => {
+    const result = parseStatement([
+      page([
+        ...stackedHeader,
+        // a fee row printed on two lines only
+        line(140, [40, '13. 8. 2026'], [100, 'Poplatek'], [510, '-50.00 CZK']),
+        line(152, [40, '13. 8. 2026'], [100, 'Vedení účtu']),
+        line(164, [40, '14. 8. 2026'], [100, 'Nákup'], [510, '-250.00 CZK']),
+        line(176, [40, '14. 8. 2026'], [100, 'ALBERT']),
+        line(188, [40, '1234567890'], [100, 'Karta']),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => [t.date, t.amount])).toEqual([
+      ['2026-08-13', -50],
+      ['2026-08-14', -250],
+    ]);
+  });
+
+  it('reads stacked rows on a page before the stacked header', () => {
+    const result = parseStatement([
+      page([
+        line(140, [40, '13. 8. 2026'], [100, 'Nákup'], [510, '-250.00 CZK']),
+        line(152, [40, '15. 8. 2026'], [100, 'DE89/0001'], [490, '48.00 EUR']),
+        line(164, [40, '1234567891'], [100, 'FIRMA'], [530, '25.00']),
+      ]),
+      page([
+        ...stackedHeader,
+        line(140, [40, '17. 8. 2026'], [100, 'Příjem'], [510, '1 200.00 CZK']),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([-250, 1200]);
+  });
+
+  it('does not take the header of a different table on a later page', () => {
+    const row = (y: number, date: string, amount: string, balance: string) =>
+      line(y, [47, date], [100, 'ALBERT'], [400, amount], [500, balance]);
+    const result = parseStatement([
+      page([
+        line(80, [40, 'Počáteční zůstatek:'], [500, '1 000,00']),
+        row(120, '02.03.2026', '-249,00', '751,00'),
+        row(140, '03.03.2026', '-100,00', '651,00'),
+      ]),
+      page([
+        line(
+          100,
+          [40, 'Datum'],
+          [100, 'Popis'],
+          [380, 'Kurz'],
+          [480, 'Částka'],
+        ),
+        line(120, [40, '31.03.2026'], [100, 'Poplatek'], [470, '-10,00']),
+      ]),
+    ]);
+
+    expect(result.transactions.slice(0, 2).map(t => t.amount)).toEqual([
+      -249, -100,
+    ]);
+  });
+
   it('ends a stacked row at the closing balance right below it', () => {
     const result = parseStatement([
       page([
@@ -1329,5 +1396,17 @@ describe('parseStatement bank layouts', () => {
       ['2026-03-02', -249],
     ]);
     expect(result.unrecognizedLines).toEqual([]);
+  });
+
+  it('does not read a dated footer at the page margin as a row', () => {
+    const result = parseStatement([
+      page([
+        line(100, [105, 'Datum'], [162, 'Popis'], [414, 'Částka']),
+        line(120, [105, '02.03.2026'], [162, 'ALBERT'], [447, '-249,00']),
+        line(800, [20, '31.03.2026 Vytištěno'], [300, 'Strana 1/1']),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([-249]);
   });
 });

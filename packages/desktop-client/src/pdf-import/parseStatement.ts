@@ -38,10 +38,11 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
   // The first table header of the statement. A page that lost its own
   // header (e.g. blacked out together with the account summary above the
   // table) still has the same columns
-  const statementColumns = findFirstHeader(pages);
+  const statementHeader = findFirstHeader(pages);
+  const statementColumns = statementHeader?.columns ?? null;
   // Layouts whose header stacks a second date under the first ("Datum"
   // over "Valuta") print each row on as many lines as the header has
-  let stackedRowLines: number | null = null;
+  let stackedRows: StackedRows | null = null;
 
   for (const [pageIndex, page] of pages.entries()) {
     const pageNumber = pageIndex + 1;
@@ -211,19 +212,29 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
       const statementDateColumn = statementColumns?.find(
         column => column.kind === 'date',
       );
+      const lineAmounts = findAmounts(line);
+      const statementAmounts = classifyAmounts(lineAmounts, statementColumns);
       if (
         date &&
         !columns &&
+        statementHeader &&
         statementColumns &&
         statementDateColumn &&
         Math.abs(date.cell.x - statementDateColumn.left) <= 30 &&
-        findAmounts(line).length > 0
+        // Only a row whose numbers all sit in the header's money and
+        // balance columns belongs to that table
+        statementAmounts.some(amount => amount.isMoney) &&
+        statementAmounts.every(
+          amount =>
+            amount.isMoney || amount.kind === 'balance' || amount.value === 0,
+        )
       ) {
         // The first row of a table whose header is missing on this page:
         // the table starts below the text above it, or below the header if
         // that was blacked out, so rows blacked out before this one count
         columns = statementColumns;
         dateX = statementDateColumn.left;
+        stackedRows = statementHeader.stackedRows;
         const above = lines[lineIndex - 1];
         const aboveBottom = above ? above.y + above.height : -Infinity;
         const blackedOutHeader = redactedRows
@@ -243,16 +254,18 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         isTableEnded = false;
       }
       addBlackedOutRowsAbove(line.y);
-      const amounts = classifyAmounts(findAmounts(line), columns);
+      const amounts = classifyAmounts(lineAmounts, columns);
 
       // The further lines of a row in a stacked layout. Their numbers are
       // details such as an amount in another currency or an exchange rate,
       // and their dates are a second date of the same row
       if (
-        stackedRowLines !== null &&
+        stackedRows &&
         current &&
-        rowLineCount < stackedRowLines &&
+        rowLineCount < stackedRows.lines &&
         line.y - current.bottom <= line.height * 1.5 &&
+        // A date where the header has no date label starts the next row
+        (!date || stackedRows.datedLines.includes(rowLineCount)) &&
         !(isLeftAligned(line) && parseSummary(line, 'any'))
       ) {
         amounts.forEach(amount => consumed.add(amount.cell));
@@ -274,7 +287,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
           hasHeader = true;
           columns = header;
           dateX = header.find(column => column.kind === 'date')?.left ?? dateX;
-          stackedRowLines = findStackedRowLines(lines, lineIndex, header);
+          stackedRows = findStackedRows(lines, lineIndex, header);
           tableTop = line.y + line.height;
           tableBottom = tableTop;
           isTableEnded = false;
@@ -658,12 +671,15 @@ function parseHeader(line: Line): Column[] | null {
 }
 
 /** The first table header in the statement. */
-function findFirstHeader(pages: StatementPage[]): Column[] | null {
+function findFirstHeader(
+  pages: StatementPage[],
+): { columns: Column[]; stackedRows: StackedRows | null } | null {
   for (const page of pages) {
-    for (const line of groupLines(page.items)) {
-      const header = parseHeader(line);
-      if (header) {
-        return header;
+    const lines = groupLines(page.items);
+    for (const [index, line] of lines.entries()) {
+      const columns = parseHeader(line);
+      if (columns) {
+        return { columns, stackedRows: findStackedRows(lines, index, columns) };
       }
     }
   }
@@ -673,22 +689,29 @@ function findFirstHeader(pages: StatementPage[]): Column[] | null {
 /** A label of a second date printed under the row's first date. */
 const stackedDatePattern = /^(valuta|datum|date|value date|splatnost)\b/;
 
+type StackedRows = {
+  /** Lines of each row, as many as the header has */
+  lines: number;
+  /** Row lines (0 is the first) that have a date under the date column */
+  datedLines: number[];
+};
+
 /**
- * The number of lines of each row when the header stacks labels on
- * several lines and one of them is a second date under the date column,
- * e.g. "Datum / Valuta / Kód transakce". A header label that only wraps
+ * Rows that span several lines, when the header stacks labels on several
+ * lines and one of them is a second date under the date column, e.g.
+ * "Datum / Valuta / Kód transakce". A header label that only wraps
  * ("Datum / zaúčtování") does not make rows span several lines.
  */
-function findStackedRowLines(
+function findStackedRows(
   lines: Line[],
   headerIndex: number,
   columns: Column[],
-): number | null {
+): StackedRows | null {
   const dateColumn = columns.find(column => column.kind === 'date');
   if (!dateColumn) {
     return null;
   }
-  let hasStackedDate = false;
+  const datedLines = [0];
   let count = 1;
   let previous = lines[headerIndex];
   for (const line of lines.slice(headerIndex + 1, headerIndex + 4)) {
@@ -707,12 +730,12 @@ function findStackedRowLines(
       cell => Math.abs(cell.x - dateColumn.left) <= 30,
     );
     if (dateCell && stackedDatePattern.test(normalize(dateCell.text))) {
-      hasStackedDate = true;
+      datedLines.push(count);
     }
     count++;
     previous = line;
   }
-  return hasStackedDate ? count : null;
+  return datedLines.length > 1 ? { lines: count, datedLines } : null;
 }
 
 const openingPattern =
@@ -816,10 +839,18 @@ function findLeadingDate(line: Line, dateX: number | null): FoundDate | null {
         ? [first]
         : [];
   for (const cell of candidates) {
-    // A row starts at the date column or left of it (e.g. a posting date
-    // before the header's only recognized date column)
-    if (dateX !== null && cell.x - dateX > 30) {
-      continue;
+    if (dateX !== null && Math.abs(cell.x - dateX) > 30) {
+      // A posting date left of the header's only recognized date column
+      // starts a row when the second date sits in that column
+      const next = line.cells[line.cells.indexOf(cell) + 1];
+      const isBeforeDateColumn =
+        cell.x < dateX &&
+        !!next &&
+        Math.abs(next.x - dateX) <= 30 &&
+        !!parseLeadingDate(next.text);
+      if (!isBeforeDateColumn) {
+        continue;
+      }
     }
     const date = parseLeadingDate(cell.text);
     if (date) {
