@@ -13,6 +13,7 @@ import { SettingsPage } from './settings-page';
 
 // Pages reached through the tab bar's "More" sheet rather than a tab.
 const PAGES_IN_MORE_SHEET = [
+  'Accounts',
   'Reports',
   'Schedules',
   'Payees',
@@ -69,6 +70,10 @@ export class MobileNavigation {
         .click();
     } else {
       await this.navbar.getByRole('link', { name: linkName }).click();
+    }
+    if (pageName === 'Transaction') {
+      // The + button opens quick add; the full form is one step further
+      await this.page.getByRole('link', { name: 'More details' }).click();
     }
 
     await pageInstance.waitFor();
