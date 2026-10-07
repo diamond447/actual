@@ -1086,3 +1086,234 @@ describe('parseStatement edge cases around blacked-out areas', () => {
     expect(result.transactions.map(t => t.amount)).toEqual([112345, -15000]);
   });
 });
+
+describe('parseStatement bank layouts', () => {
+  const box = (x: number, y: number, width: number): StatementRect => ({
+    x,
+    y,
+    width,
+    height: LINE_HEIGHT,
+  });
+
+  it('reads rows printed on several lines under a stacked header', () => {
+    const result = parseStatement([
+      page([
+        line(40, [40, 'Počáteční zůstatek:'], [250, '1 000.00']),
+        line(56, [40, 'Příjmy celkem:'], [250, '1 200.00']),
+        line(72, [40, 'Výdaje celkem:'], [250, '250.00']),
+        line(88, [40, 'Konečný zůstatek:'], [250, '1 950.00']),
+        line(
+          120,
+          [40, 'Datum'],
+          [100, 'Kategorie transakce'],
+          [200, 'Typ transakce'],
+          [360, 'VS'],
+          [520, 'Částka'],
+        ),
+        line(
+          132,
+          [40, 'Valuta'],
+          [100, 'Číslo protiúčtu'],
+          [200, 'Zpráva'],
+          [360, 'KS'],
+          [480, 'Původní částka'],
+        ),
+        line(
+          144,
+          [40, 'Kód transakce'],
+          [100, 'Název protiúčtu'],
+          [200, 'Poznámka'],
+          [360, 'SS'],
+          [530, 'Kurz'],
+        ),
+        line(
+          160,
+          [40, '13. 8. 2026'],
+          [100, 'Nákup'],
+          [200, 'Platba kartou'],
+          [510, '-250.00 CZK'],
+        ),
+        line(172, [40, '13. 8. 2026'], [100, '123-456/0100'], [200, 'VS:1']),
+        line(184, [40, '1234567890'], [100, 'ALBERT'], [200, 'Nákup']),
+        line(
+          200,
+          [40, '17. 8. 2026'],
+          [100, 'Příjem'],
+          [200, 'Příchozí platba'],
+          [510, '1 200.00 CZK'],
+        ),
+        // a payment in another currency with its exchange rate
+        line(212, [40, '15. 8. 2026'], [100, 'DE89/0001'], [490, '48.00 EUR']),
+        line(224, [40, '1234567891'], [100, 'FIRMA'], [530, '25.00']),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => [t.date, t.amount])).toEqual([
+      ['2026-08-13', -250],
+      ['2026-08-17', 1200],
+    ]);
+    expect(result.transactions[0].notes).toContain('ALBERT');
+    expect(result.unrecognizedLines).toEqual([]);
+    expect(result.openingBalance).toBe(1000);
+    expect(result.closingBalance).toBe(1950);
+  });
+
+  it('keeps dated rows apart under a header whose labels only wrap', () => {
+    const result = parseStatement([
+      page([
+        line(100, [40, 'Datum'], [100, 'Popis'], [400, 'Částka']),
+        line(110, [40, 'zaúčtování'], [100, 'transakce']),
+        line(130, [40, '02.03.2026'], [100, 'ALBERT']),
+        line(140, [40, '03.03.2026'], [100, 'LIDL'], [400, '-100,00']),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => [t.date, t.amount])).toEqual([
+      ['2026-03-02', null],
+      ['2026-03-03', -100],
+    ]);
+  });
+
+  const header = (y: number) =>
+    line(
+      y,
+      [40, 'Datum'],
+      [100, 'Popis transakce'],
+      [400, 'Částka'],
+      [500, 'Zůstatek'],
+    );
+  const row = (
+    y: number,
+    date: string,
+    text: string,
+    amount: string,
+    balance: string,
+  ) => line(y, [47, date], [100, text], [400, amount], [500, balance]);
+  /** Boxes over the header labels, which start where the labels do. */
+  const blackedOutHeader = (y: number) => [
+    box(40, y, 20),
+    box(100, y, 60),
+    box(400, y, 24),
+    box(500, y, 32),
+  ];
+  /** A table row hidden completely: date, description, amount, balance. */
+  const blackedOutRow = (y: number) => [
+    box(47, y, 40),
+    box(100, y, 120),
+    box(404, y, 26),
+    box(506, y, 34),
+  ];
+
+  it('uses the header of a later page on a page whose header is missing', () => {
+    const result = parseStatement([
+      page([
+        line(80, [40, 'Počáteční zůstatek:'], [500, '1 000,00']),
+        row(120, '02.03.2026', 'ALBERT', '-249,00', '751,00'),
+      ]),
+      page([header(100), row(120, '05.03.2026', 'LIDL', '-100,00', '651,00')]),
+    ]);
+
+    expect(result.transactions.map(t => [t.amount, t.reviewReasons])).toEqual([
+      [-249, []],
+      [-100, []],
+    ]);
+    expect(result.unrecognizedLines).toEqual([]);
+  });
+
+  it('starts the table below a blacked-out header', () => {
+    const result = parseStatement([
+      page(
+        [
+          line(80, [40, 'Počáteční zůstatek:'], [500, '1 000,00']),
+          row(140, '02.03.2026', 'ALBERT', '-249,00', '651,00'),
+        ],
+        [...blackedOutHeader(100), ...blackedOutRow(120)],
+      ),
+      page([header(100), row(120, '05.03.2026', 'LIDL', '-100,00', '551,00')]),
+    ]);
+
+    expect(
+      result.transactions.map(t => [t.amount, t.blackedOutRows ?? null]),
+    ).toEqual([
+      // 1 000 → 651 minus ALBERT's -249,00 leaves -100,00 for the hidden row
+      [-100, 1],
+      [-249, null],
+      [-100, null],
+    ]);
+  });
+
+  it('does not count a blacked-out balance above a blacked-out header', () => {
+    const result = parseStatement([
+      page(
+        [row(140, '02.03.2026', 'ALBERT', '-249,00', '651,00')],
+        [
+          // the opening balance, label and amount
+          box(40, 80, 70),
+          box(500, 80, 40),
+          ...blackedOutHeader(100),
+          ...blackedOutRow(120),
+        ],
+      ),
+      page([header(100), row(120, '05.03.2026', 'LIDL', '-100,00', '551,00')]),
+    ]);
+
+    expect(result.transactions[0]).toMatchObject({
+      amount: null,
+      blackedOutRows: 1,
+    });
+  });
+
+  it('finds hidden rows on a last page that only has the closing balance', () => {
+    const result = parseStatement([
+      page([
+        line(80, [40, 'Počáteční zůstatek:'], [500, '1 000,00']),
+        header(100),
+        row(120, '02.03.2026', 'ALBERT', '-249,00', '751,00'),
+      ]),
+      page(
+        [line(160, [40, 'Konečný zůstatek:'], [500, '91,00'])],
+        [
+          ...blackedOutHeader(100),
+          ...blackedOutRow(120),
+          ...blackedOutRow(130),
+        ],
+      ),
+    ]);
+
+    expect(
+      result.transactions.map(t => [t.amount, t.blackedOutRows ?? null]),
+    ).toEqual([
+      [-249, null],
+      [-660, 2],
+    ]);
+  });
+
+  it('reads rows dated left of the only recognized date column', () => {
+    const result = parseStatement([
+      page([
+        // the first label lost a letter when the file was printed again
+        line(
+          100,
+          [44, 'Datu'],
+          [105, 'Datum'],
+          [162, 'Popis transakce'],
+          [414, 'Částka'],
+          [481, 'Zůstatek'],
+        ),
+        line(
+          120,
+          [51, '02.03.2026'],
+          [110, '02.03.2026'],
+          [162, 'ALBERT'],
+          [447, '-249,00'],
+          [516, '751,00'],
+        ),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => [t.date, t.amount])).toEqual([
+      ['2026-03-02', -249],
+    ]);
+    expect(result.unrecognizedLines).toEqual([]);
+  });
+});

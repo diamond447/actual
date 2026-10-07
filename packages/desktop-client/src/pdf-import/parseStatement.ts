@@ -35,6 +35,13 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
   let hasSignedAmounts = false;
   let usesDebitCreditColumns = false;
   let isAfterBlackedOutRow = false;
+  // The first table header of the statement. A page that lost its own
+  // header (e.g. blacked out together with the account summary above the
+  // table) still has the same columns
+  const statementColumns = findFirstHeader(pages);
+  // Layouts whose header stacks a second date under the first ("Datum"
+  // over "Valuta") print each row on as many lines as the header has
+  let stackedRowLines: number | null = null;
 
   for (const [pageIndex, page] of pages.entries()) {
     const pageNumber = pageIndex + 1;
@@ -49,6 +56,8 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
     const lines = groupLines(page.items);
     const consumed = new Set<Cell>();
     let current: PendingTransaction | null = null;
+    // Lines of the current row so far
+    let rowLineCount = 0;
     // The transaction table on this page: from its header (or, on pages
     // without a repeated header, its first dated row) to the closing balance
     let tableTop: number | null = null;
@@ -59,11 +68,13 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
     const redactedRows = groupRedactionRows(page.redactions);
     const lineHeight = medianLineHeight(lines);
     let redactedRowIndex = 0;
+    let hasHeader = false;
 
     const start = (transaction: PendingTransaction) => {
       pending.push(transaction);
       lastDate = transaction.date;
       isAfterBlackedOutRow = false;
+      rowLineCount = 1;
       return transaction;
     };
 
@@ -76,6 +87,23 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         redactedRows[redactedRowIndex].y < y
       ) {
         const row = redactedRows[redactedRowIndex++];
+        const tableColumns = columns ?? statementColumns;
+        // Only the top of the table on a page without a visible header can
+        // be a blacked-out header; further down, boxes that start where the
+        // labels do are a hidden row with left-aligned values
+        const mayBeHeader =
+          !hasHeader &&
+          pending.length === pageStart &&
+          !!tableColumns &&
+          isBlackedOutHeader(row, tableColumns);
+        // A blacked-out header starts the table on a page that has no
+        // header or row left to show where it starts
+        if (tableTop === null && mayBeHeader) {
+          tableTop = row.y + row.height;
+          tableBottom = tableTop;
+          isTableEnded = false;
+          continue;
+        }
         const lastBottom = Math.max(
           tableBottom ?? -Infinity,
           pending.length > pageStart
@@ -92,7 +120,10 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         if (!isNextToTable) {
           continue;
         }
-        const tableColumns = columns;
+        if (mayBeHeader) {
+          tableBottom = Math.max(lastBottom, row.y + row.height);
+          continue;
+        }
         const dateColumn = tableColumns?.find(column => column.kind === 'date');
         // A whole row has its date and its amount blacked out in separate
         // boxes; a blacked-out detail line of a visible row only covers the
@@ -175,17 +206,74 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
       );
     };
 
-    for (const line of lines) {
+    for (const [lineIndex, line] of lines.entries()) {
+      const date = findLeadingDate(line, dateX);
+      const statementDateColumn = statementColumns?.find(
+        column => column.kind === 'date',
+      );
+      if (
+        date &&
+        !columns &&
+        statementColumns &&
+        statementDateColumn &&
+        Math.abs(date.cell.x - statementDateColumn.left) <= 30 &&
+        findAmounts(line).length > 0
+      ) {
+        // The first row of a table whose header is missing on this page:
+        // the table starts below the text above it, or below the header if
+        // that was blacked out, so rows blacked out before this one count
+        columns = statementColumns;
+        dateX = statementDateColumn.left;
+        const above = lines[lineIndex - 1];
+        const aboveBottom = above ? above.y + above.height : -Infinity;
+        const blackedOutHeader = redactedRows
+          .filter(
+            row =>
+              row.y >= aboveBottom &&
+              row.y < line.y &&
+              isBlackedOutHeader(row, statementColumns),
+          )
+          .pop();
+        tableTop = blackedOutHeader
+          ? blackedOutHeader.y + blackedOutHeader.height
+          : above
+            ? aboveBottom
+            : line.y - 1;
+        tableBottom = tableTop;
+        isTableEnded = false;
+      }
       addBlackedOutRowsAbove(line.y);
       const amounts = classifyAmounts(findAmounts(line), columns);
-      const date = findLeadingDate(line, dateX);
+
+      // The further lines of a row in a stacked layout. Their numbers are
+      // details such as an amount in another currency or an exchange rate,
+      // and their dates are a second date of the same row
+      if (
+        stackedRowLines !== null &&
+        current &&
+        rowLineCount < stackedRowLines &&
+        line.y - current.bottom <= line.height * 1.5
+      ) {
+        amounts.forEach(amount => consumed.add(amount.cell));
+        appendDescription(
+          current,
+          line,
+          amounts.map(amount => amount.cell),
+        );
+        current.isRedacted ||= overlapsRedaction(line, page.redactions);
+        current.bottom = line.y + line.height;
+        rowLineCount++;
+        continue;
+      }
 
       if (!date) {
         const header = parseHeader(line);
         if (header) {
           current = null;
+          hasHeader = true;
           columns = header;
           dateX = header.find(column => column.kind === 'date')?.left ?? dateX;
+          stackedRowLines = findStackedRowLines(lines, lineIndex, header);
           tableTop = line.y + line.height;
           tableBottom = tableTop;
           isTableEnded = false;
@@ -292,6 +380,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
           appendDescription(current, line, [money.cell, balance?.cell]);
           current.isRedacted ||= overlapsRedaction(line, page.redactions);
           current.bottom = line.y + line.height;
+          rowLineCount++;
           continue;
         }
       }
@@ -336,6 +425,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         appendDescription(current, line, []);
         current.isRedacted ||= overlapsRedaction(line, page.redactions);
         current.bottom = line.y + line.height;
+        rowLineCount++;
       }
     }
 
@@ -366,6 +456,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
   const signsKnown = hasSignedAmounts || usesDebitCreditColumns;
   const { signsResolved } = applyRunningBalances(pending, {
     openingBalance,
+    closingBalance,
     fixSigns: !signsKnown,
   });
 
@@ -565,12 +656,70 @@ function parseHeader(line: Line): Column[] | null {
   return hasDateColumn && hasMoneyColumn ? columns : null;
 }
 
+/** The first table header in the statement. */
+function findFirstHeader(pages: StatementPage[]): Column[] | null {
+  for (const page of pages) {
+    for (const line of groupLines(page.items)) {
+      const header = parseHeader(line);
+      if (header) {
+        return header;
+      }
+    }
+  }
+  return null;
+}
+
+/** A label of a second date printed under the row's first date. */
+const stackedDatePattern = /^(valuta|datum|date|value date|splatnost)\b/;
+
+/**
+ * The number of lines of each row when the header stacks labels on
+ * several lines and one of them is a second date under the date column,
+ * e.g. "Datum / Valuta / Kód transakce". A header label that only wraps
+ * ("Datum / zaúčtování") does not make rows span several lines.
+ */
+function findStackedRowLines(
+  lines: Line[],
+  headerIndex: number,
+  columns: Column[],
+): number | null {
+  const dateColumn = columns.find(column => column.kind === 'date');
+  if (!dateColumn) {
+    return null;
+  }
+  let hasStackedDate = false;
+  let count = 1;
+  let previous = lines[headerIndex];
+  for (const line of lines.slice(headerIndex + 1, headerIndex + 4)) {
+    const isLabelLine =
+      line.y - (previous.y + previous.height) <= previous.height * 1.5 &&
+      line.cells.every(cell => !/\d/.test(cell.text)) &&
+      line.cells.filter(cell =>
+        headerKinds.some(({ pattern }) => pattern.test(normalize(cell.text))),
+      ).length *
+        2 >=
+        line.cells.length;
+    if (!isLabelLine) {
+      break;
+    }
+    const dateCell = line.cells.find(
+      cell => Math.abs(cell.x - dateColumn.left) <= 30,
+    );
+    if (dateCell && stackedDatePattern.test(normalize(dateCell.text))) {
+      hasStackedDate = true;
+    }
+    count++;
+    previous = line;
+  }
+  return hasStackedDate ? count : null;
+}
+
 const openingPattern =
   /^(pocatecni (zustatek|stav)|zustatek na zacatku|predchozi zustatek|opening balance|previous balance|starting balance|beginning balance)/;
 const closingPattern =
   /^(konecny (zustatek|stav)|zustatek na konci|novy zustatek|closing balance|ending balance|new balance)/;
 const otherSummaryPattern =
-  /^(celkem|soucet|souhrn|obraty|zustatek|disponibilni zustatek|blokovane|stav uctu|total|balance|strana|page)\b/;
+  /^(celkem|soucet|souhrn|obraty|zustatek|disponibilni zustatek|blokovane|stav uctu|total|balance|strana|page|(prijmy|vydaje|kredity|debety|poplatky|uroky) celkem|(prichozi|odchozi) platby|(kreditni|debetni) polozky)\b/;
 
 /**
  * Balances and totals. In 'balance-only' mode (dated rows) only phrases
@@ -666,7 +815,9 @@ function findLeadingDate(line: Line, dateX: number | null): FoundDate | null {
         ? [first]
         : [];
   for (const cell of candidates) {
-    if (dateX !== null && Math.abs(cell.x - dateX) > 30) {
+    // A row starts at the date column or left of it (e.g. a posting date
+    // before the header's only recognized date column)
+    if (dateX !== null && cell.x - dateX > 30) {
       continue;
     }
     const date = parseLeadingDate(cell.text);
@@ -749,6 +900,22 @@ function nearestColumn(cell: Cell, columns: Column[]): Column {
       (a, b) => Math.abs(center - a.center) - Math.abs(center - b.center),
     )[0];
   return nearby ?? match;
+}
+
+/**
+ * A blacked-out table header: its boxes start where the header labels do,
+ * in the date column and a money column, unlike a row whose numbers are
+ * aligned within their columns.
+ */
+function isBlackedOutHeader(row: RedactionRow, columns: Column[]) {
+  const matches = columns.filter(column =>
+    row.rects.some(rect => Math.abs(rect.x - column.left) <= 2),
+  );
+  return (
+    matches.length >= 3 &&
+    matches.some(column => column.kind === 'date') &&
+    matches.some(column => [...moneyKinds, 'balance'].includes(column.kind))
+  );
 }
 
 /** Whether a blacked-out area reaches into a column's area. */
@@ -884,8 +1051,13 @@ function applyRunningBalances(
   transactions: PendingTransaction[],
   {
     openingBalance,
+    closingBalance,
     fixSigns,
-  }: { openingBalance: number | null; fixSigns: boolean },
+  }: {
+    openingBalance: number | null;
+    closingBalance: number | null;
+    fixSigns: boolean;
+  },
 ): { signsResolved: boolean } {
   const withBalance = transactions.filter(t => t.balance !== null);
   if (withBalance.length < 2 && openingBalance === null) {
@@ -976,6 +1148,18 @@ function applyRunningBalances(
       (previousBalance !== null && row.amount !== null
         ? round(previousBalance + row.amount)
         : null);
+  }
+  // Rows blacked out after the last visible row moved what is left to the
+  // closing balance
+  if (
+    blackedOut &&
+    ordered === transactions &&
+    previousBalance !== null &&
+    closingBalance !== null &&
+    !fixSigns
+  ) {
+    blackedOut.amount = round(closingBalance - previousBalance);
+    blackedOut.isAmountFromBalance = true;
   }
   return { signsResolved: fixSigns && unresolvedSigns === 0 };
 }
