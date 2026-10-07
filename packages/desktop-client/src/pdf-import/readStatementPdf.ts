@@ -4,6 +4,7 @@ import {
   textItemsFromContent,
 } from './pageContent';
 import type { PagePixels } from './pageContent';
+import { ensureReadableStreamIteration } from './readableStreamIteration';
 import type { StatementPage, StatementTextItem } from './types';
 
 /** Pages with fewer text items are treated as scanned images. */
@@ -36,8 +37,8 @@ type StatementPdfErrorReason =
 export class StatementPdfError extends Error {
   readonly reason: StatementPdfErrorReason;
 
-  constructor(reason: StatementPdfErrorReason) {
-    super(reason);
+  constructor(reason: StatementPdfErrorReason, options?: ErrorOptions) {
+    super(reason, options);
     this.reason = reason;
   }
 }
@@ -54,6 +55,7 @@ export async function readStatementPdf(
   data: ArrayBuffer,
   { password, createOcr, onProgress }: ReadStatementOptions = {},
 ): Promise<StatementPage[]> {
+  ensureReadableStreamIteration();
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const { default: workerUrl } =
     await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
@@ -82,7 +84,7 @@ export async function readStatementPdf(
           : 'password-required',
       );
     }
-    throw new StatementPdfError('invalid-pdf');
+    throw new StatementPdfError('invalid-pdf', { cause: error });
   }
 
   // One canvas for all pages: Safari limits the total canvas memory
@@ -149,6 +151,24 @@ export async function readStatementPdf(
     await loadingTask.destroy();
   }
   return pages;
+}
+
+/**
+ * A short technical reason for a failed read, shown so a failure can be
+ * reported. Error messages describe the code, not the statement's text.
+ */
+export function describeReadError(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; current != null && depth < 3; depth++) {
+    parts.push(
+      current instanceof Error
+        ? `${current.name}: ${current.message}`
+        : String(current),
+    );
+    current = current instanceof Error ? current.cause : null;
+  }
+  return parts.join(' ← ').slice(0, 300);
 }
 
 function createCanvas(): OcrImage {

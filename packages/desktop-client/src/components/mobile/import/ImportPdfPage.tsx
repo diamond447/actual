@@ -26,6 +26,7 @@ import { addNotification } from '#notifications/notificationsSlice';
 import { suggestCategories } from '#pdf-import/categorize';
 import { parseStatement } from '#pdf-import/parseStatement';
 import {
+  describeReadError,
   readStatementPdf,
   StatementPdfError,
 } from '#pdf-import/readStatementPdf';
@@ -68,7 +69,7 @@ type ReviewStep = {
 };
 
 type Step =
-  | { name: 'choose'; error?: string }
+  | { name: 'choose'; error?: string; errorDetails?: string }
   | { name: 'password'; file: ArrayBuffer; isWrong: boolean }
   | { name: 'reading'; page: number; pageCount: number }
   | ReviewStep
@@ -157,6 +158,7 @@ export function ImportPdfPage() {
       setStep({
         name: 'choose',
         error: t('This file could not be read. Is it a PDF?'),
+        errorDetails: describeReadError(error),
       });
     }
   };
@@ -461,6 +463,20 @@ export function ImportPdfPage() {
           </Button>
           {step.error && (
             <Text style={{ color: theme.errorText }}>{step.error}</Text>
+          )}
+          {step.errorDetails && (
+            <Text
+              style={{
+                color: theme.pageTextSubdued,
+                ...styles.smallText,
+                userSelect: 'text',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              <Trans>
+                Technical details: {{ errorDetails: step.errorDetails }}
+              </Trans>
+            </Text>
           )}
           <Text style={{ color: theme.pageTextSubdued, ...styles.smallText }}>
             <Trans>
