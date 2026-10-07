@@ -89,6 +89,7 @@
     "#components/util/accountValidation": "./src/components/util/accountValidation.ts",
     "#components/util/countries": "./src/components/util/countries.ts",
     "#components/util/localeToCountry": "./src/components/util/localeToCountry.ts",
+    "#category-appearance": "./src/category-appearance/index.ts",
     "#components/*": "./src/components/*.tsx",
     "#hooks/useCachedSchedules": "./src/hooks/useCachedSchedules.tsx",
     "#hooks/useDisplayPayee": "./src/hooks/useDisplayPayee.tsx",
