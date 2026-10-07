@@ -207,12 +207,15 @@ async function loadGlobalPrefs(): Promise<GlobalPrefs> {
     customCssOverride: customCssOverride || undefined,
     serverSelfSignedCert: serverSelfSignedCert || undefined,
     syncServerConfig: syncServerConfig || undefined,
+    // Fork: announcements about upstream Actual releases and news are off
+    // by default; this server runs the family fork and is updated by its
+    // admin. They can still be turned on in the settings.
     notifyWhenUpdateIsAvailable:
       notifyWhenUpdateIsAvailable === undefined
-        ? true
-        : notifyWhenUpdateIsAvailable, // default to true
+        ? false
+        : notifyWhenUpdateIsAvailable,
     lastSeenNewsDate: lastSeenNewsDate || undefined,
-    showNewsFeed: showNewsFeed === undefined ? true : showNewsFeed, // default to true
+    showNewsFeed: showNewsFeed === undefined ? false : showNewsFeed
   };
 }
 
