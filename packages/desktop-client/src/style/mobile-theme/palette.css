@@ -1,0 +1,55 @@
+/*
+ * Mobile palette (fork). Loaded after the base theme on narrow screens only.
+ *
+ * The base themes reference palette scales rather than raw colors, so
+ * remapping the scales restyles every mobile screen at once: purple accents
+ * become teal and the blue-grey neutrals become warm greys. Light and dark
+ * themes both read from these scales.
+ */
+:root {
+  --font-family:
+    'Plus Jakarta Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+
+  --palette-navy50: #f7f8f5;
+  --palette-navy100: #eef0ec;
+  --palette-navy150: #e4e6e1;
+  --palette-navy200: #cdd1ca;
+  --palette-navy300: #a7aca6;
+  --palette-navy400: #80867f;
+  --palette-navy500: #5e645f;
+  --palette-navy600: #464b47;
+  --palette-navy700: #2b2f2c;
+  --palette-navy800: #1d201e;
+  --palette-navy900: #15171a;
+
+  --palette-gray50: #f7f8f5;
+  --palette-gray80: #f2f3ef;
+  --palette-gray100: #eef0ec;
+  --palette-gray150: #dde0da;
+  --palette-gray200: #c4c8c1;
+  --palette-gray300: #9da29c;
+  --palette-gray400: #757b75;
+  --palette-gray500: #555a56;
+  --palette-gray600: #3a3e3b;
+  --palette-gray700: #262927;
+  --palette-gray800: #17191a;
+  --palette-gray900: #0e0f10;
+
+  --palette-purple50: #f2faf7;
+  --palette-purple100: #e3f4ee;
+  --palette-purple125: #d2ede4;
+  --palette-purple150: #bfe5d8;
+  --palette-purple200: #8fd3be;
+  --palette-purple300: #4fb89c;
+  --palette-purple400: #1f9a7f;
+  --palette-purple500: #0e7c66;
+  --palette-purple600: #0b6a57;
+  --palette-purple700: #095747;
+  --palette-purple800: #074538;
+  --palette-purple900: #04332a;
+
+  --palette-hover: #f7f8f5;
+  --palette-border: #e4e6e1;
+  --palette-selected: #d2ede4;
+}

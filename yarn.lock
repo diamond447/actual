@@ -244,6 +244,7 @@ __metadata:
     "@codemirror/view": "npm:^6.43.6"
     "@emotion/css": "npm:^11.13.5"
     "@fontsource-variable/inter": "npm:^5.2.8"
+    "@fontsource-variable/plus-jakarta-sans": "npm:^5.2.8"
     "@fontsource/redacted-script": "npm:^5.2.8"
     "@internationalized/date": "npm:^3.12.2"
     "@lezer/highlight": "npm:^1.2.3"
@@ -4509,6 +4510,13 @@ __metadata:
   version: 5.2.8
   resolution: "@fontsource-variable/inter@npm:5.2.8"
   checksum: 10/7f45ab415f0d3c43f31129dd9972dcbfb60ebe51801891b9a88a7ba395d4be664c507b0027138f42307b9ffe91bdd564fcae98bce5b244046274f4aceae07382
+  languageName: node
+  linkType: hard
+
+"@fontsource-variable/plus-jakarta-sans@npm:^5.2.8":
+  version: 5.3.0
+  resolution: "@fontsource-variable/plus-jakarta-sans@npm:5.3.0"
+  checksum: 10/85e9b20c99550dcf64a8d9c3835018c4cad25204747e7b0a17147a83b62ca79fa0bebb66d2790088e6c1960132901fa065ef026c7910647adc823f76c167732b
   languageName: node
   linkType: hard
 
