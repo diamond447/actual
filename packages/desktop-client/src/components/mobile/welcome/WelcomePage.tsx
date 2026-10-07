@@ -519,7 +519,7 @@ export function WelcomePage() {
             isSaving ? (
               <Trans>Starting...</Trans>
             ) : (
-              <Trans>Start</Trans>
+              <Trans>Get started</Trans>
             )
           ) : isSaving ? (
             <Trans>Saving...</Trans>
