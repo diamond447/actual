@@ -53,6 +53,15 @@ const CURRENCY_SYMBOLS: Record<OnboardingCurrency, string> = {
   USD: '$',
 };
 
+// The guide is usually reached by a redirect from /overview, and our
+// useNavigate goes back in history when the target equals the previous
+// page, which would leave the budget. A state of its own forces a real
+// navigation.
+const OVERVIEW_NAVIGATION = {
+  replace: true,
+  state: { fromOnboarding: true },
+};
+
 export function WelcomePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -65,7 +74,7 @@ export function WelcomePage() {
   // If onboarding was already completed for this budget, go straight to /overview
   useEffect(() => {
     if (onboardingCompleted === 'true') {
-      void navigate('/overview', { replace: true });
+      void navigate('/overview', OVERVIEW_NAVIGATION);
     }
   }, [onboardingCompleted, navigate]);
 
@@ -140,10 +149,10 @@ export function WelcomePage() {
           prefs: { 'onboarding-completed': 'true' },
         }),
       );
-      void navigate('/overview', { replace: true });
+      void navigate('/overview', OVERVIEW_NAVIGATION);
     } catch (error) {
       console.error('Failed to skip onboarding:', error);
-      void navigate('/overview', { replace: true });
+      void navigate('/overview', OVERVIEW_NAVIGATION);
     }
   };
 
@@ -307,7 +316,9 @@ export function WelcomePage() {
         selectedCategoryIds.has(cat.id),
       );
 
-      for (const cat of selectedCategories) {
+      // A new category goes to the top of its group, so create them last to
+      // first to keep the order of the list
+      for (const cat of [...selectedCategories].reverse()) {
         const catId = (await send('category-create', {
           name: t(cat.name),
           groupId: expensesGroupId,
@@ -380,7 +391,7 @@ export function WelcomePage() {
           prefs: { 'onboarding-completed': 'true' },
         }),
       );
-      void navigate('/overview', { replace: true });
+      void navigate('/overview', OVERVIEW_NAVIGATION);
     } catch (error) {
       console.error('Failed to finish onboarding:', error);
       dispatch(
