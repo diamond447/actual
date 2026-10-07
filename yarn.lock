@@ -254,6 +254,8 @@ __metadata:
     "@rolldown/plugin-babel": "npm:~0.2.3"
     "@rollup/plugin-inject": "npm:^5.0.5"
     "@tanstack/react-query": "npm:^5.101.2"
+    "@tesseract.js-data/ces": "npm:^1.0.0"
+    "@tesseract.js-data/eng": "npm:^1.0.0"
     "@testing-library/dom": "npm:10.4.1"
     "@testing-library/jest-dom": "npm:^6.9.1"
     "@testing-library/react": "npm:16.3.2"
@@ -282,6 +284,7 @@ __metadata:
     jsdom: "npm:^29.1.1"
     lru-cache: "npm:^11.5.2"
     mdast-util-newline-to-break: "npm:^2.0.0"
+    pdfjs-dist: "npm:^6.3.289"
     plugins-service: "workspace:*"
     re-resizable: "npm:^6.11.2"
     react: "npm:19.2.7"
@@ -308,6 +311,7 @@ __metadata:
     rolldown: "npm:^1.2.0"
     rollup-plugin-visualizer: "npm:^7.0.1"
     sass: "npm:^1.101.0"
+    tesseract.js: "npm:^7.0.0"
     typescript-strict-plugin: "npm:^2.4.4"
     usehooks-ts: "npm:^3.1.1"
     uuid: "npm:^14.0.2"
@@ -5128,6 +5132,129 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@napi-rs/canvas-android-arm64@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-android-arm64@npm:1.0.9"
+  conditions: os=android & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-darwin-arm64@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-darwin-arm64@npm:1.0.9"
+  conditions: os=darwin & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-darwin-x64@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-darwin-x64@npm:1.0.9"
+  conditions: os=darwin & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-linux-arm-gnueabihf@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-linux-arm-gnueabihf@npm:1.0.9"
+  conditions: os=linux & cpu=arm
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-linux-arm64-gnu@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-linux-arm64-gnu@npm:1.0.9"
+  conditions: os=linux & cpu=arm64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-linux-arm64-musl@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-linux-arm64-musl@npm:1.0.9"
+  conditions: os=linux & cpu=arm64 & libc=musl
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-linux-riscv64-gnu@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-linux-riscv64-gnu@npm:1.0.9"
+  conditions: os=linux & cpu=riscv64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-linux-x64-gnu@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-linux-x64-gnu@npm:1.0.9"
+  conditions: os=linux & cpu=x64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-linux-x64-musl@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-linux-x64-musl@npm:1.0.9"
+  conditions: os=linux & cpu=x64 & libc=musl
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-win32-arm64-msvc@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-win32-arm64-msvc@npm:1.0.9"
+  conditions: os=win32 & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas-win32-x64-msvc@npm:1.0.9":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas-win32-x64-msvc@npm:1.0.9"
+  conditions: os=win32 & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@napi-rs/canvas@npm:^1.0.0":
+  version: 1.0.9
+  resolution: "@napi-rs/canvas@npm:1.0.9"
+  dependencies:
+    "@napi-rs/canvas-android-arm64": "npm:1.0.9"
+    "@napi-rs/canvas-darwin-arm64": "npm:1.0.9"
+    "@napi-rs/canvas-darwin-x64": "npm:1.0.9"
+    "@napi-rs/canvas-linux-arm-gnueabihf": "npm:1.0.9"
+    "@napi-rs/canvas-linux-arm64-gnu": "npm:1.0.9"
+    "@napi-rs/canvas-linux-arm64-musl": "npm:1.0.9"
+    "@napi-rs/canvas-linux-riscv64-gnu": "npm:1.0.9"
+    "@napi-rs/canvas-linux-x64-gnu": "npm:1.0.9"
+    "@napi-rs/canvas-linux-x64-musl": "npm:1.0.9"
+    "@napi-rs/canvas-win32-arm64-msvc": "npm:1.0.9"
+    "@napi-rs/canvas-win32-x64-msvc": "npm:1.0.9"
+  dependenciesMeta:
+    "@napi-rs/canvas-android-arm64":
+      optional: true
+    "@napi-rs/canvas-darwin-arm64":
+      optional: true
+    "@napi-rs/canvas-darwin-x64":
+      optional: true
+    "@napi-rs/canvas-linux-arm-gnueabihf":
+      optional: true
+    "@napi-rs/canvas-linux-arm64-gnu":
+      optional: true
+    "@napi-rs/canvas-linux-arm64-musl":
+      optional: true
+    "@napi-rs/canvas-linux-riscv64-gnu":
+      optional: true
+    "@napi-rs/canvas-linux-x64-gnu":
+      optional: true
+    "@napi-rs/canvas-linux-x64-musl":
+      optional: true
+    "@napi-rs/canvas-win32-arm64-msvc":
+      optional: true
+    "@napi-rs/canvas-win32-x64-msvc":
+      optional: true
+    canvas:
+      built: true
+    skia-canvas:
+      built: true
+  checksum: 10/67e6c6a150a6e2c854b8d237fa01c6b40a014b492b72513a9c5922856e144322ff11b4dc3fc15650248f3228b417fc652bf2ee5e9b1c7f61358f0d09a68d2740
+  languageName: node
+  linkType: hard
+
 "@napi-rs/wasm-runtime@npm:^0.2.3":
   version: 0.2.12
   resolution: "@napi-rs/wasm-runtime@npm:0.2.12"
@@ -8150,6 +8277,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tesseract.js-data/ces@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@tesseract.js-data/ces@npm:1.0.0"
+  checksum: 10/01228006c4fdf57f6ddc874a8b48fd5527faf41eea338cb3a5e9ef61935d83df98862cb38e45ad8da54041fdbf28cd1fa0c742b4622e6585f9e2521d48798913
+  languageName: node
+  linkType: hard
+
+"@tesseract.js-data/eng@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@tesseract.js-data/eng@npm:1.0.0"
+  checksum: 10/2ccdc948577ed66cafbc587bbcf227742630f28c0e11a7c93d07745e8ff0aa461d3a9413ababfcab5a75d7e5c75af8c6957e79e75f49e636306e5263aacd70b5
+  languageName: node
+  linkType: hard
+
 "@testing-library/dom@npm:10.4.1, @testing-library/dom@npm:^10.4.1":
   version: 10.4.1
   resolution: "@testing-library/dom@npm:10.4.1"
@@ -10808,6 +10949,13 @@ __metadata:
     inherits: "npm:^2.0.4"
     readable-stream: "npm:^3.4.0"
   checksum: 10/0340d3d70def4213cd9cbcd8592f7c5922d3668e7b231286c354613fac4a8411ad373cff26e06162da7423035bbd5caafce3e140a5f397be72fcd1e9d86f1179
+  languageName: node
+  linkType: hard
+
+"bmp-js@npm:^0.1.0":
+  version: 0.1.0
+  resolution: "bmp-js@npm:0.1.0"
+  checksum: 10/9597f41038f4a326bc465d009e2e170203fc296219a743efbcf531289913680761f155be8a2e586c0b48c59644e46449be556a5ec5b09c413b7e84a05db25fd4
   languageName: node
   linkType: hard
 
@@ -17006,6 +17154,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"idb-keyval@npm:^6.2.0":
+  version: 6.3.0
+  resolution: "idb-keyval@npm:6.3.0"
+  checksum: 10/e89299183e067de3faff54449905dde82df30b2936079ca565e778e0d71bbffaef514ac1339be76b835cddd3679815f8c8728f29c9eed6844e61d66fd486e042
+  languageName: node
+  linkType: hard
+
 "idb@npm:^7.0.1":
   version: 7.1.1
   resolution: "idb@npm:7.1.1"
@@ -17707,6 +17862,13 @@ __metadata:
   version: 0.1.0
   resolution: "is-unicode-supported@npm:0.1.0"
   checksum: 10/a2aab86ee7712f5c2f999180daaba5f361bdad1efadc9610ff5b8ab5495b86e4f627839d085c6530363c6d6d4ecbde340fb8e54bdb83da4ba8e0865ed5513c52
+  languageName: node
+  linkType: hard
+
+"is-url@npm:^1.2.4":
+  version: 1.2.4
+  resolution: "is-url@npm:1.2.4"
+  checksum: 10/100e74b3b1feab87a43ef7653736e88d997eb7bd32e71fd3ebc413e58c1cbe56269699c776aaea84244b0567f2a7d68dfaa512a062293ed2f9fdecb394148432
   languageName: node
   linkType: hard
 
@@ -20407,6 +20569,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"node-fetch@npm:^2.6.9":
+  version: 2.7.0
+  resolution: "node-fetch@npm:2.7.0"
+  dependencies:
+    whatwg-url: "npm:^5.0.0"
+  peerDependencies:
+    encoding: ^0.1.0
+  peerDependenciesMeta:
+    encoding:
+      optional: true
+  checksum: 10/b24f8a3dc937f388192e59bcf9d0857d7b6940a2496f328381641cb616efccc9866e89ec43f2ec956bbd6c3d3ee05524ce77fe7b29ccd34692b3a16f237d6676
+  languageName: node
+  linkType: hard
+
 "node-gyp-build@npm:^4.8.4":
   version: 4.8.4
   resolution: "node-gyp-build@npm:4.8.4"
@@ -20785,6 +20961,15 @@ __metadata:
     is-docker: "npm:^2.1.1"
     is-wsl: "npm:^2.2.0"
   checksum: 10/acd81a1d19879c818acb3af2d2e8e9d81d17b5367561e623248133deb7dd3aefaed527531df2677d3e6aaf0199f84df57b6b2262babff8bf46ea0029aac536c9
+  languageName: node
+  linkType: hard
+
+"opencollective-postinstall@npm:^2.0.3":
+  version: 2.0.3
+  resolution: "opencollective-postinstall@npm:2.0.3"
+  bin:
+    opencollective-postinstall: index.js
+  checksum: 10/69d63778087cd10c9d707d9ed360556780cfdd0cd6241ded0e26632f467f1d5a064f4a9aec19a30c187770c17adba034d988f7684b226f3a73e79f44e73fab0e
   languageName: node
   linkType: hard
 
@@ -21700,6 +21885,18 @@ __metadata:
     sha.js: "npm:^2.4.12"
     to-buffer: "npm:^1.2.1"
   checksum: 10/ce1c9a2ebbc843c86090ec6cac6d07429dece7c1fdb87437ce6cf869d0429cc39cab61bc34215585f4a00d8009862df45e197fbd54f3508ccba8ff312a88261b
+  languageName: node
+  linkType: hard
+
+"pdfjs-dist@npm:^6.3.289":
+  version: 6.3.289
+  resolution: "pdfjs-dist@npm:6.3.289"
+  dependencies:
+    "@napi-rs/canvas": "npm:^1.0.0"
+  dependenciesMeta:
+    "@napi-rs/canvas":
+      optional: true
+  checksum: 10/18c64044d2bfc9836e66062d465f4eace71a19ace6023e01e08d2c072732d914752a7daf87768f634fec51bcc7d0b300671f0702163e3b741c79e2fd06059b0c
   languageName: node
   linkType: hard
 
@@ -23943,6 +24140,13 @@ __metadata:
   version: 1.4.2
   resolution: "regenerate@npm:1.4.2"
   checksum: 10/dc6c95ae4b3ba6adbd7687cafac260eee4640318c7a95239d5ce847d9b9263979758389e862fe9c93d633b5792ea4ada5708df75885dc5aa05a309fa18140a87
+  languageName: node
+  linkType: hard
+
+"regenerator-runtime@npm:^0.13.3":
+  version: 0.13.11
+  resolution: "regenerator-runtime@npm:0.13.11"
+  checksum: 10/d493e9e118abef5b099c78170834f18540c4933cedf9bfabc32d3af94abfb59a7907bd7950259cbab0a929ebca7db77301e8024e5121e6482a82f78283dfd20c
   languageName: node
   linkType: hard
 
@@ -26379,6 +26583,30 @@ __metadata:
   languageName: node
   linkType: hard
 
+"tesseract.js-core@npm:^7.0.0":
+  version: 7.0.0
+  resolution: "tesseract.js-core@npm:7.0.0"
+  checksum: 10/6eab7ecb462abc4c4c15f5a61f924700a48f5d1c8ce7f2b1447960b0f6f10063d7c0e5ac56f1905ae87d643a99c6ee28a90b827148aa006b712d5cecd2991f19
+  languageName: node
+  linkType: hard
+
+"tesseract.js@npm:^7.0.0":
+  version: 7.0.0
+  resolution: "tesseract.js@npm:7.0.0"
+  dependencies:
+    bmp-js: "npm:^0.1.0"
+    idb-keyval: "npm:^6.2.0"
+    is-url: "npm:^1.2.4"
+    node-fetch: "npm:^2.6.9"
+    opencollective-postinstall: "npm:^2.0.3"
+    regenerator-runtime: "npm:^0.13.3"
+    tesseract.js-core: "npm:^7.0.0"
+    wasm-feature-detect: "npm:^1.8.0"
+    zlibjs: "npm:^0.3.1"
+  checksum: 10/eefcce0c143b1f78c81220d32e83631778280d402e5439d4c50316779d7ecc4a11486690ca0748e1419100ceb33ef78121ff51876ef807b9de7c74bfb848690d
+  languageName: node
+  linkType: hard
+
 "text-decoder@npm:^1.1.0":
   version: 1.2.3
   resolution: "text-decoder@npm:1.2.3"
@@ -26638,6 +26866,13 @@ __metadata:
   dependencies:
     punycode: "npm:^2.3.1"
   checksum: 10/e6d402eb2b780a40042f327f77b4ae316da1d2b18a29c16e48c239f5267c6005bbf780f854179cfae62b02dfaa70b0e9aad8f0078ccc4225f5b3b3b131928e8f
+  languageName: node
+  linkType: hard
+
+"tr46@npm:~0.0.3":
+  version: 0.0.3
+  resolution: "tr46@npm:0.0.3"
+  checksum: 10/8f1f5aa6cb232f9e1bdc86f485f916b7aa38caee8a778b378ffec0b70d9307873f253f5cbadbe2955ece2ac5c83d0dc14a77513166ccd0a0c7fe197e21396695
   languageName: node
   linkType: hard
 
@@ -27835,6 +28070,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"wasm-feature-detect@npm:^1.8.0":
+  version: 1.9.0
+  resolution: "wasm-feature-detect@npm:1.9.0"
+  checksum: 10/d1f73402c2de141ccb55e4a9e9a7896c0ac83977880b7b9cb7abdd155d969d43fb8b88f1d1d8a248c2d1158e3eedac54d6b76c034708ac8e038c05ff9b4e104d
+  languageName: node
+  linkType: hard
+
 "watchpack@npm:^2.5.1":
   version: 2.5.1
   resolution: "watchpack@npm:2.5.1"
@@ -27867,6 +28109,13 @@ __metadata:
   version: 2.0.1
   resolution: "web-namespaces@npm:2.0.1"
   checksum: 10/b6d9f02f1a43d0ef0848a812d89c83801d5bbad57d8bb61f02eb6d7eb794c3736f6cc2e1191664bb26136594c8218ac609f4069722c6f56d9fc2d808fa9271c6
+  languageName: node
+  linkType: hard
+
+"webidl-conversions@npm:^3.0.0":
+  version: 3.0.1
+  resolution: "webidl-conversions@npm:3.0.1"
+  checksum: 10/b65b9f8d6854572a84a5c69615152b63371395f0c5dcd6729c45789052296df54314db2bc3e977df41705eacb8bc79c247cee139a63fa695192f95816ed528ad
   languageName: node
   linkType: hard
 
@@ -28111,6 +28360,16 @@ __metadata:
     tr46: "npm:^6.0.0"
     webidl-conversions: "npm:^8.0.1"
   checksum: 10/221cc15ef89288dc1fafdb409352c62ab12ba9ff7f0753e925d8799c87b20371f3bc762dc0a8a5b9c23cddc4b1860537fc6c1bcc9d816ace9b3d3c47212cd163
+  languageName: node
+  linkType: hard
+
+"whatwg-url@npm:^5.0.0":
+  version: 5.0.0
+  resolution: "whatwg-url@npm:5.0.0"
+  dependencies:
+    tr46: "npm:~0.0.3"
+    webidl-conversions: "npm:^3.0.0"
+  checksum: 10/f95adbc1e80820828b45cc671d97da7cd5e4ef9deb426c31bcd5ab00dc7103042291613b3ef3caec0a2335ed09e0d5ed026c940755dbb6d404e2b27f940fdf07
   languageName: node
   linkType: hard
 
@@ -28785,6 +29044,13 @@ __metadata:
   version: 1.2.1
   resolution: "yocto-queue@npm:1.2.1"
   checksum: 10/0843d6c2c0558e5c06e98edf9c17942f25c769e21b519303a5c2adefd5b738c9b2054204dc856ac0cd9d134b1bc27d928ce84fd23c9e2423b7e013d5a6f50577
+  languageName: node
+  linkType: hard
+
+"zlibjs@npm:^0.3.1":
+  version: 0.3.1
+  resolution: "zlibjs@npm:0.3.1"
+  checksum: 10/f7cbf1d22495820b334db1ea3cd4b04b293fcd316fc8cf9e5edc8c9f1a983586582a81420115bb38e48f358d28cfafedfcfbe6f80ad8f0effacefffb930136c2
   languageName: node
   linkType: hard
 
