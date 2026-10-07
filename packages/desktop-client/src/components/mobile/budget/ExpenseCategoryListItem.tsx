@@ -14,6 +14,7 @@ import type { BudgetType } from '@actual-app/core/server/prefs';
 import * as monthUtils from '@actual-app/core/shared/months';
 import type { CategoryEntity } from '@actual-app/core/types/models';
 
+import { CategoryAppearancePicker, CategoryBadge } from '#category-appearance';
 import { useCategoriesById } from '#hooks/useCategories';
 import { useFormat } from '#hooks/useFormat';
 import { useNavigate } from '#hooks/useNavigate';
@@ -40,6 +41,7 @@ function ExpenseCategoryName({
   onEditCategory,
   show3Columns,
 }: ExpenseCategoryNameProps) {
+  const { t } = useTranslation();
   const sidebarColumnWidth = getColumnWidth({
     show3Columns,
     isSidebar: true,
@@ -49,8 +51,9 @@ function ExpenseCategoryName({
     <View
       style={{
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
       }}
     >
       {/* Hidden drag button */}
@@ -64,10 +67,26 @@ function ExpenseCategoryName({
           overflow: 'hidden',
         }}
       />
+      <CategoryAppearancePicker category={category}>
+        <Button
+          variant="bare"
+          aria-label={t('Change icon and color for {{categoryName}}', {
+            categoryName: category.name,
+          })}
+          style={{
+            padding: 0,
+            marginRight: 6,
+            flexShrink: 0,
+          }}
+        >
+          <CategoryBadge category={category} size={24} />
+        </Button>
+      </CategoryAppearancePicker>
       <Button
         variant="bare"
         style={{
-          maxWidth: sidebarColumnWidth,
+          maxWidth: `calc(${sidebarColumnWidth} - 30px)`,
+          minWidth: 0,
         }}
         onPress={() => onEditCategory?.(category.id)}
       >
@@ -81,7 +100,14 @@ function ExpenseCategoryName({
           <Text
             style={{
               ...styles.lineClamp(2),
-              width: sidebarColumnWidth,
+              // Wrap between words and hyphenate a word too long for the
+              // narrow column instead of cutting it at any letter
+              wordBreak: 'normal',
+              overflowWrap: 'break-word',
+              hyphens: 'auto',
+              WebkitHyphens: 'auto',
+              flexShrink: 1,
+              minWidth: 0,
               textAlign: 'left',
               ...styles.smallText,
             }}
