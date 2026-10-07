@@ -15,8 +15,10 @@ import { HeroCard } from './HeroCard';
 import { isBudgetType } from './overviewCalculations';
 import { OverviewHeader } from './OverviewHeader';
 import { RecentTransactionsCard } from './RecentTransactionsCard';
+import { useOnboardingRedirect } from './useOnboardingRedirect';
 
 export function OverviewPage() {
+  const { shouldRedirect } = useOnboardingRedirect();
   const [month, setMonth] = useState(() => monthUtils.currentMonth());
   const [budgetTypePref] = useSyncedPref('budgetType');
   // Same default as the budget page: no pref means an envelope budget
@@ -26,6 +28,10 @@ export function OverviewPage() {
   useEffect(() => {
     void prewarmMonth(budgetType, spreadsheet, month);
   }, [budgetType, month, spreadsheet]);
+
+  if (shouldRedirect) {
+    return null;
+  }
 
   return (
     <Page

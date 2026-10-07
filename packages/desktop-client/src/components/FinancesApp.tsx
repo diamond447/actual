@@ -251,7 +251,8 @@ export function FinancesApp() {
                   <Notifications />
                   <BankSyncStatus />
                   {isNarrowWidth &&
-                    location.pathname !== '/transactions/quick' && (
+                    location.pathname !== '/transactions/quick' &&
+                    location.pathname !== '/welcome' && (
                       <MobilePageHeaderSlot />
                     )}
 
@@ -262,6 +263,15 @@ export function FinancesApp() {
                         <Navigate
                           to={isNarrowWidth ? '/overview' : '/budget'}
                           replace
+                        />
+                      }
+                    />
+                    <Route
+                      path="/welcome"
+                      element={
+                        <ForkMobileScreen
+                          name="WelcomePage"
+                          wideFallback="/budget"
                         />
                       }
                     />
