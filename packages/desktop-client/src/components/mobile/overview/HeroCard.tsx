@@ -4,6 +4,7 @@ import { NavLink } from 'react-router';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
+import type { TransObjectLiteral } from '@actual-app/core/types/util';
 
 import { FinancialText } from '#components/FinancialText';
 import { useFormat } from '#hooks/useFormat';
@@ -45,6 +46,8 @@ export function HeroCard({ month, budgetType }: HeroCardProps) {
     parseHeroBudgetValues(rawSpent, rawBudgeted, budgetType);
 
   const daysLeft = calculateDaysLeft(month);
+  const budgetedAmount = format(budgeted, 'financial');
+  const leftAmount = format(left, 'financial');
 
   return (
     <View
@@ -85,7 +88,7 @@ export function HeroCard({ month, budgetType }: HeroCardProps) {
             <Trans>
               of{' '}
               <FinancialText style={{ fontWeight: 700 }}>
-                {format(budgeted, 'financial')}
+                {{ budgetedAmount } as TransObjectLiteral}
               </FinancialText>{' '}
               budgeted
             </Trans>
@@ -121,14 +124,14 @@ export function HeroCard({ month, budgetType }: HeroCardProps) {
               {isOverbudget ? (
                 <Trans>
                   <FinancialText style={{ fontWeight: 700 }}>
-                    {format(left, 'financial')}
+                    {{ leftAmount } as TransObjectLiteral}
                   </FinancialText>{' '}
                   over budget
                 </Trans>
               ) : (
                 <Trans>
                   <FinancialText style={{ fontWeight: 700 }}>
-                    {format(left, 'financial')}
+                    {{ leftAmount } as TransObjectLiteral}
                   </FinancialText>{' '}
                   left
                 </Trans>
