@@ -4,6 +4,7 @@ import {
   getNumberFormat,
   integerToCurrencyWithDecimal,
   looselyParseAmount,
+  normalizeAmountEntry,
   setNumberFormat,
   stringToInteger,
   titleFirst,
@@ -303,5 +304,55 @@ describe('utility functions', () => {
         expect(decoded).toBeCloseTo(amount, 8);
       },
     );
+  });
+
+  describe('normalizeAmountEntry', () => {
+    afterEach(() => {
+      setNumberFormat({ format: 'comma-dot', hideFraction: false });
+    });
+
+    test('treats digits as whole units', () => {
+      setNumberFormat({ format: 'space-comma', hideFraction: false });
+      const { thousandsSeparator: ts } = getNumberFormat();
+      expect(normalizeAmountEntry('1')).toBe('1');
+      expect(normalizeAmountEntry('123')).toBe('123');
+      expect(normalizeAmountEntry('1234')).toBe(`1${ts}234`);
+      expect(normalizeAmountEntry(`1${ts}2345`)).toBe(`12${ts}345`);
+      expect(normalizeAmountEntry('007')).toBe('7');
+      expect(normalizeAmountEntry('0')).toBe('0');
+      expect(normalizeAmountEntry('')).toBe('');
+    });
+
+    test('starts decimals only after a separator', () => {
+      setNumberFormat({ format: 'space-comma', hideFraction: false });
+      expect(normalizeAmountEntry('12,')).toBe('12,');
+      expect(normalizeAmountEntry('12,5')).toBe('12,5');
+      expect(normalizeAmountEntry('12,50')).toBe('12,50');
+      expect(normalizeAmountEntry('12,505')).toBe('12,50');
+      expect(normalizeAmountEntry(',99')).toBe('0,99');
+      expect(normalizeAmountEntry('0,99')).toBe('0,99');
+    });
+
+    test('accepts the alternate separator as decimal', () => {
+      setNumberFormat({ format: 'space-comma', hideFraction: false });
+      expect(normalizeAmountEntry('12.5')).toBe('12,5');
+
+      setNumberFormat({ format: 'comma-dot', hideFraction: false });
+      expect(normalizeAmountEntry('12.5')).toBe('12.5');
+      // "," is the thousands separator in comma-dot, so it is not a decimal
+      expect(normalizeAmountEntry('1,2345')).toBe('12,345');
+    });
+
+    test('drops decimals when they are hidden', () => {
+      setNumberFormat({ format: 'space-comma', hideFraction: true });
+      expect(normalizeAmountEntry('12,5', true)).toBe('12');
+      expect(normalizeAmountEntry('12,', true)).toBe('12');
+    });
+
+    test('parses back to the typed amount', () => {
+      setNumberFormat({ format: 'dot-comma', hideFraction: false });
+      expect(currencyToAmount(normalizeAmountEntry('1234,5'))).toBe(1234.5);
+      expect(currencyToAmount(normalizeAmountEntry('12,'))).toBe(12);
+    });
   });
 });

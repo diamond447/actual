@@ -16,7 +16,7 @@ import { resetFormulaPreferencesCache } from '#server/formulas/bootstrap';
 import { handleBudgetImport } from '#server/importers';
 import type { ImportableBudgetType } from '#server/importers';
 import { app as mainApp } from '#server/main-app';
-import { mutator } from '#server/mutators';
+import { mutator, runMutator } from '#server/mutators';
 import * as prefs from '#server/prefs';
 import { getServer } from '#server/server-config';
 import * as sheet from '#server/sheet';
@@ -448,6 +448,18 @@ async function createBudget({
   if (error) {
     logger.log('Error creating budget: ' + error);
     return { error };
+  }
+
+  if (!testMode) {
+    // New budgets start with tracking budgeting, which is simpler for
+    // beginners. It can be switched to envelope budgeting in the settings.
+    await runMutator(() =>
+      mainApp.handlers['preferences/save']({
+        id: 'budgetType',
+        value: 'tracking',
+      }),
+    );
+    clearUndo();
   }
 
   if (!avoidUpload && !testMode) {

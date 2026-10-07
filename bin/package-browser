@@ -27,6 +27,7 @@ if [ "$SKIP_TRANSLATIONS" = false ]; then
   git checkout .
   git pull
   popd > /dev/null
+  packages/desktop-client/bin/apply-locale-overrides
   packages/desktop-client/bin/remove-untranslated-languages
 fi
 

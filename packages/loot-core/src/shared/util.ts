@@ -261,6 +261,48 @@ export function appendDecimals(
   return amountToCurrency(currencyToAmount(result));
 }
 
+/**
+ * Normalize amount text as the user types it, treating digits as whole
+ * units: "123" stays 123, and decimals only start after the user types a
+ * decimal separator (at most two decimal digits). Either "," or "." is
+ * accepted as the decimal separator unless it is the thousands separator
+ * of the current number format. Unlike `appendDecimals`, the result keeps
+ * partial input such as a trailing separator so the user can keep typing.
+ */
+export function normalizeAmountEntry(
+  amountText: string,
+  hideDecimals = false,
+): string {
+  const { decimalSeparator, thousandsSeparator } = getNumberFormat();
+  const alternateSeparator = decimalSeparator === ',' ? '.' : ',';
+
+  let text = amountText;
+  if (alternateSeparator !== thousandsSeparator) {
+    text = text.replaceAll(alternateSeparator, decimalSeparator);
+  }
+
+  const separatorIndex = text.indexOf(decimalSeparator);
+  const rawInteger =
+    separatorIndex === -1 ? text : text.slice(0, separatorIndex);
+  const decimals =
+    separatorIndex === -1 || hideDecimals
+      ? null
+      : text
+          .slice(separatorIndex + 1)
+          .replaceAll(/\D/g, '')
+          .slice(0, 2);
+
+  const integer = rawInteger.replaceAll(/\D/g, '').replace(/^0+(?!$)/, '');
+  if (integer === '' && decimals === null) {
+    return '';
+  }
+
+  const formattedInteger = reapplyThousandSeparators(integer || '0');
+  return decimals === null
+    ? formattedInteger
+    : formattedInteger + decimalSeparator + decimals;
+}
+
 const NUMBER_FORMATS = [
   'comma-dot',
   'dot-comma',

@@ -25,10 +25,14 @@ export type SyncedPrefs = Partial<
     | 'dateFormat'
     | 'numberFormat'
     | 'hideFraction'
+    // 'natural' (default): typed digits are whole units; 'cents': digits fill
+    // in from the smallest unit like a cash register
+    | 'amountEntryMode'
     | 'isPrivacyEnabled'
     | 'currencySymbolPosition'
     | 'currencySpaceBetweenAmountAndSymbol'
     | 'defaultCurrencyCode'
+    | 'onboarding-completed'
     | `show-account-${string}-net-worth-chart`
     | `side-nav.show-balance-history-${string}`
     // @deprecated: superseded by `transaction-table-columns-${string}`; only
@@ -42,6 +46,7 @@ export type SyncedPrefs = Partial<
     | 'transaction-table-columns'
     | `transaction-table-columns-${string}`
     | `show-group-${string}`
+    | `category-appearance-${string}`
     | 'sync-transfer-date'
     // TODO: pull from src/components/modals/ImportTransactions.js
     | `parse-date-${string}-${'csv' | 'qif'}`

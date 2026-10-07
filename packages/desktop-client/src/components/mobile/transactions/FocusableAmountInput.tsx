@@ -16,6 +16,7 @@ import {
   amountToCurrency,
   appendDecimals,
   currencyToAmount,
+  normalizeAmountEntry,
   reapplyThousandSeparators,
 } from '@actual-app/core/shared/util';
 import { css } from '@emotion/css';
@@ -49,6 +50,7 @@ const AmountInput = memo(function AmountInput({
   const [value, setValue] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const [hideFraction] = useSyncedPref('hideFraction');
+  const [amountEntryMode] = useSyncedPref('amountEntryMode');
 
   const mergedInputRef = useMergedRefs<HTMLInputElement>(
     props.inputRef,
@@ -117,8 +119,13 @@ const AmountInput = memo(function AmountInput({
   };
 
   const onChangeText = (text: string) => {
-    text = reapplyThousandSeparators(text);
-    text = appendDecimals(text, String(hideFraction) === 'true');
+    const hideDecimals = String(hideFraction) === 'true';
+    if (amountEntryMode === 'cents') {
+      text = reapplyThousandSeparators(text);
+      text = appendDecimals(text, hideDecimals);
+    } else {
+      text = normalizeAmountEntry(text, hideDecimals);
+    }
     setEditing(true);
     setText(text);
     props.onChangeValue?.(text);
