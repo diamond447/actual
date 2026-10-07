@@ -43,6 +43,8 @@ export function FormatSettings() {
   const [_numberFormat] = useSyncedPref('numberFormat');
   const numberFormat = _numberFormat || 'comma-dot';
   const [hideFraction, setHideFractionPref] = useSyncedPref('hideFraction');
+  const [amountEntryMode, setAmountEntryModePref] =
+    useSyncedPref('amountEntryMode');
 
   const daysOfWeek = useDaysOfWeek();
 
@@ -95,6 +97,21 @@ export function FormatSettings() {
               />
               <label htmlFor="settings-textDecimal">
                 <Trans>Hide decimal places</Trans>
+              </label>
+            </Text>
+
+            <Text style={{ display: 'flex' }}>
+              <Checkbox
+                id="settings-amountEntryCents"
+                checked={amountEntryMode === 'cents'}
+                onChange={e =>
+                  setAmountEntryModePref(
+                    e.currentTarget.checked ? 'cents' : 'natural',
+                  )
+                }
+              />
+              <label htmlFor="settings-amountEntryCents">
+                <Trans>Type amounts starting from cents</Trans>
               </label>
             </Text>
           </Column>
