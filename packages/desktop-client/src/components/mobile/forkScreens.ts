@@ -3,3 +3,4 @@
 export { OverviewPage } from './overview/OverviewPage';
 export { QuickAddPage } from './quick-add/QuickAddPage';
 export { TransactionsFeedPage } from './transactions/TransactionsFeedPage';
+export { WelcomePage } from './welcome/WelcomePage';
