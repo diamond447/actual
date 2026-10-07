@@ -252,7 +252,8 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         stackedRowLines !== null &&
         current &&
         rowLineCount < stackedRowLines &&
-        line.y - current.bottom <= line.height * 1.5
+        line.y - current.bottom <= line.height * 1.5 &&
+        !(isLeftAligned(line) && parseSummary(line, 'any'))
       ) {
         amounts.forEach(amount => consumed.add(amount.cell));
         appendDescription(

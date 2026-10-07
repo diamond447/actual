@@ -1158,6 +1158,20 @@ describe('parseStatement bank layouts', () => {
     expect(result.closingBalance).toBe(1950);
   });
 
+  it('ends a stacked row at the closing balance right below it', () => {
+    const result = parseStatement([
+      page([
+        line(100, [40, 'Datum'], [100, 'Popis'], [520, 'Částka']),
+        line(112, [40, 'Valuta'], [100, 'Zpráva'], [490, 'Původní částka']),
+        line(128, [40, '13. 8. 2026'], [100, 'ALBERT'], [510, '-250.00 CZK']),
+        line(140, [40, 'Konečný zůstatek:'], [510, '750.00 CZK']),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => t.amount)).toEqual([-250]);
+    expect(result.closingBalance).toBe(750);
+  });
+
   it('keeps dated rows apart under a header whose labels only wrap', () => {
     const result = parseStatement([
       page([
