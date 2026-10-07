@@ -364,5 +364,5 @@ export function formatDayHeader(
   if (date === yesterday) {
     return t('Yesterday');
   }
-  return monthUtils.format(date, 'EEEE d MMMM', locale);
+  return monthUtils.format(date, 'EEEE do MMMM', locale);
 }

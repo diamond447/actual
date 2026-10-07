@@ -333,7 +333,7 @@ function TransactionsHeader({
             paddingRight: 2,
           }}
         >
-          {monthUtils.format(month, "MMMM ''yy", locale)}
+          {monthUtils.format(month, "LLLL ''yy", locale)}
         </Text>
         <Button
           variant="bare"
