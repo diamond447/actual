@@ -4,7 +4,7 @@ import type {
   PayeeEntity,
   TransactionEntity,
 } from '@actual-app/core/types/models';
-import { enUS } from 'date-fns/locale';
+import { cs, enUS } from 'date-fns/locale';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -377,7 +377,11 @@ describe('transactionsFeedHelper', () => {
         '2026-10-06',
         '2026-10-05',
       );
-      expect(res).toBe('Tuesday 15 September');
+      expect(res).toBe('Tuesday 15th September');
+      // Czech uses the ordinal dot and the genitive month
+      expect(
+        formatDayHeader('2026-09-15', cs, k => k, '2026-10-06', '2026-10-05'),
+      ).toBe('úterý 15. září');
     });
   });
 

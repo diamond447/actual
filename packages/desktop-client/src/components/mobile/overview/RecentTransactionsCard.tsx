@@ -130,6 +130,12 @@ export function RecentTransactionsCard() {
               payeeName = payeesById[trans.payee].name;
             } else if (trans.imported_payee) {
               payeeName = trans.imported_payee;
+            } else if (trans.notes?.trim()) {
+              // Logged with quick add: no payee, so the note or category
+              // names the payment
+              payeeName = trans.notes.trim();
+            } else if (category) {
+              payeeName = category.name;
             } else {
               payeeName = t('No payee');
             }
