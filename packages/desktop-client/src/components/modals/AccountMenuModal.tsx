@@ -8,7 +8,11 @@ import {
   SvgDotsHorizontalTriple,
   SvgLockOpen,
 } from '@actual-app/components/icons/v1';
-import { SvgLockClosed, SvgNotesPaper } from '@actual-app/components/icons/v2';
+import {
+  SvgLockClosed,
+  SvgNotesPaper,
+  SvgUploadThickBottom,
+} from '@actual-app/components/icons/v2';
 import { Menu } from '@actual-app/components/menu';
 import { Popover } from '@actual-app/components/popover';
 import { styles } from '@actual-app/components/styles';
@@ -43,6 +47,7 @@ export function AccountMenuModal({
   onEditNotes,
   onClose,
   onReconcile,
+  onImportPdf,
   onToggleRunningBalance,
   onToggleReconciled,
 }: AccountMenuModalProps) {
@@ -199,6 +204,19 @@ export function AccountMenuModal({
                     style={{ paddingRight: 5 }}
                   />
                   <Trans>Reconcile</Trans>
+                </Button>
+              )}
+              {onImportPdf && !account.closed && (
+                <Button
+                  style={{ ...buttonStyle, flexBasis: '100%', marginTop: 10 }}
+                  onPress={onImportPdf}
+                >
+                  <SvgUploadThickBottom
+                    width={20}
+                    height={20}
+                    style={{ paddingRight: 5 }}
+                  />
+                  <Trans>Import PDF statement</Trans>
                 </Button>
               )}
             </View>

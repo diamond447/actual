@@ -36,3 +36,5 @@ locale/
 
 # service worker build output
 dev-dist
+public/ocr
+public/pdfjs
