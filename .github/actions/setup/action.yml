@@ -72,6 +72,10 @@ runs:
         path: ${{ inputs.working-directory }}/packages/desktop-client/locale
         persist-credentials: false
       if: ${{ inputs.download-translations == 'true' && !env.ACT }}
+    - name: Apply fork locale overrides
+      run: packages/desktop-client/bin/apply-locale-overrides
+      shell: bash
+      if: ${{ inputs.download-translations == 'true' && !env.ACT }}
     - name: Remove untranslated languages
       run: packages/desktop-client/bin/remove-untranslated-languages
       shell: bash
