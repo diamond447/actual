@@ -1,0 +1,34 @@
+/* Mobile light theme (fork): flat page header, teal accent, white cards. */
+:root {
+  --color-pageBackground: #f4f5f2;
+  --color-pageBackgroundTopLeft: #f4f5f2;
+  --color-pageBackgroundBottomRight: var(--palette-purple100);
+  --color-pageBackgroundLineTop: var(--palette-white);
+  --color-pageBackgroundLineMid: #f4f5f2;
+  --color-pageBackgroundLineBottom: var(--palette-purple150);
+  --color-pageText: #15171a;
+  --color-pageTextLink: var(--palette-purple500);
+
+  --color-mobilePageBackground: #f4f5f2;
+  --color-mobileHeaderBackground: var(--color-mobilePageBackground);
+  --color-mobileHeaderText: #15171a;
+  --color-mobileHeaderTextSubdued: var(--palette-navy400);
+  --color-mobileHeaderTextHover: rgba(21, 23, 26, 0.08);
+  --color-mobileNavBackground: var(--palette-white);
+  --color-mobileNavItem: var(--palette-navy500);
+  --color-mobileNavItemSelected: var(--palette-purple500);
+  --color-mobileAccountShadow: rgba(21, 23, 26, 0.08);
+  --color-mobileAccountText: var(--palette-purple600);
+  --color-mobileTransactionSelected: var(--palette-purple500);
+  --color-mobileConfigServerViewTheme: var(--palette-purple500);
+
+  --color-buttonPrimaryBackgroundHover: var(--palette-purple600);
+  --color-checkboxBackgroundSelected: var(--palette-purple500);
+  --color-checkboxBorderSelected: var(--palette-purple500);
+  --color-checkboxShadowSelected: var(--palette-purple300);
+  --color-tableRowBackgroundHighlight: var(--palette-purple100);
+  --color-buttonNormalSelectedBackground: var(--palette-purple500);
+
+  --color-floatingActionBarBackground: #15171a;
+  --color-floatingActionBarText: var(--palette-white);
+}

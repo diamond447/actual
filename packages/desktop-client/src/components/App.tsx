@@ -29,6 +29,7 @@ import { useDispatch, useSelector, useStore } from '#redux';
 import {
   CustomThemeStyle,
   hasHiddenScrollbars,
+  MobileThemeStyle,
   ThemeStyle,
   useTheme,
 } from '#style';
@@ -236,6 +237,7 @@ export function App() {
                         <AppInner />
                       </ErrorBoundary>
                       <ThemeStyle />
+                      <MobileThemeStyle />
                       <CustomThemeStyle />
                       <ErrorBoundary FallbackComponent={FatalError}>
                         <Modals />
