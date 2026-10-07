@@ -17,6 +17,7 @@ import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import { getNumberFormat } from '@actual-app/core/shared/util';
 import type { TransactionEntity } from '@actual-app/core/types/models';
+import type { TransObjectLiteral } from '@actual-app/core/types/util';
 import { css } from '@emotion/css';
 import { format as formatDate, parseISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
@@ -190,6 +191,7 @@ export function QuickAddPage() {
   );
   const amountInCents = getAmountAsInteger(keypadState, 2);
 
+  const accountName = selectedAccount?.name || t('Select account');
   const [isSaving, setIsSaving] = useState(false);
   const isSaveDisabled =
     isSaving || amountInCents <= 0 || !selectedCategoryId || !selectedAccountId;
@@ -462,7 +464,7 @@ export function QuickAddPage() {
                   marginLeft: 4,
                 }}
               >
-                {selectedAccount?.name || t('Select account')}
+                {{ accountName } as TransObjectLiteral}
               </span>
             </Trans>
           </button>
