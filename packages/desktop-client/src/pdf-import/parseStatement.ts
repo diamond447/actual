@@ -259,13 +259,23 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
       // The further lines of a row in a stacked layout. Their numbers are
       // details such as an amount in another currency or an exchange rate,
       // and their dates are a second date of the same row
+      const rowCurrency = current?.currency ?? null;
       if (
         stackedRows &&
         current &&
         rowLineCount < stackedRows.lines &&
         line.y - current.bottom <= line.height * 1.5 &&
-        // A date where the header has no date label starts the next row
-        (!date || stackedRows.datedLines.includes(rowLineCount)) &&
+        // A date where the header has no date label starts the next row,
+        // and so does a dated line with an amount in the row's currency (a
+        // second line's amount is in another currency)
+        (!date ||
+          (stackedRows.datedLines.includes(rowLineCount) &&
+            !amounts.some(
+              amount =>
+                amount.isMoney &&
+                !!amount.currency &&
+                amount.currency === rowCurrency,
+            ))) &&
         !(isLeftAligned(line) && parseSummary(line, 'any'))
       ) {
         amounts.forEach(amount => consumed.add(amount.cell));
@@ -344,6 +354,7 @@ export function parseStatement(pages: StatementPage[]): ParsedStatement {
         current = start({
           date: date.value,
           amount: money ? takeAmount(money) : null,
+          currency: money?.currency ?? null,
           balance: balance?.value ?? null,
           hasMoneyCell,
           // Without a header, a single amount on a row with a blacked-out
@@ -547,6 +558,8 @@ type PendingTransaction = {
   isDateFromPreviousRow?: boolean;
   /** Stands for this many table rows the user blacked out completely */
   blackedOutRows?: number;
+  /** Currency printed with the amount */
+  currency?: string | null;
   descriptionLines: string[];
   bottom: number;
 };

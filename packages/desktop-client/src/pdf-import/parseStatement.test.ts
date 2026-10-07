@@ -1183,6 +1183,24 @@ describe('parseStatement bank layouts', () => {
     ]);
   });
 
+  it('starts a new row at a dated amount in the same currency', () => {
+    const result = parseStatement([
+      page([
+        ...stackedHeader,
+        // a row printed on one line only
+        line(140, [40, '13. 8. 2026'], [100, 'Poplatek'], [510, '-50.00 CZK']),
+        line(152, [40, '14. 8. 2026'], [100, 'Nákup'], [510, '-250.00 CZK']),
+        line(164, [40, '14. 8. 2026'], [100, '123/0100']),
+        line(176, [40, '1234567890'], [100, 'ALBERT']),
+      ]),
+    ]);
+
+    expect(result.transactions.map(t => [t.date, t.amount])).toEqual([
+      ['2026-08-13', -50],
+      ['2026-08-14', -250],
+    ]);
+  });
+
   it('reads stacked rows on a page before the stacked header', () => {
     const result = parseStatement([
       page([
