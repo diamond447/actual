@@ -2382,6 +2382,7 @@
   "Taxable portion (%)": "Zdanitelná část (%)",
   "Taxed at (%)": "Zdaněno sazbou (%)",
   "Teal": "Tyrkysová",
+  "Technical details: {{errorDetails}}": "Technické podrobnosti: {{errorDetails}}",
   "Templating is deprecated and will be removed in a future release. Switch this action to a formula instead.": "Šablonování je zastaralé a bude odstraněno v budoucí verzi. Přepni tuto akci na vzorec.",
   "Text": "Text",
   "Text Functions": "Textové funkce",
